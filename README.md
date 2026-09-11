@@ -72,7 +72,7 @@ have neither. The deployed app only reads what ingestion writes.
 | Framework | Next.js App Router | Server Components query at request time; the chat endpoint streams |
 | Database | Supabase Postgres + pgvector | One database for rows and vectors; RLS is the access control |
 | Index | HNSW + GIN | HNSW needs no training step or list tuning as the corpus grows |
-| Embeddings | OpenAI `text-embedding-3-small` | Swappable — see `app/_lib/rag/embed.js` |
+| Embeddings | Gemini `gemini-embedding-001` at 1536 dims | Free tier; asks for the dimensionality that matches the column, so no migration. Swappable — see `app/_lib/rag/embed.js` |
 | Answers | Claude Opus 5 | Follows negative instructions ("use only these passages") reliably |
 | Follow-up rewriting | Claude Haiku 4.5 | A mechanical transformation; no reason to pay Opus rates |
 | Deploy | Vercel | Pin the region to your Supabase region |
@@ -81,8 +81,8 @@ have neither. The deployed app only reads what ingestion writes.
 
 ## Setup
 
-**Prerequisites:** Node 20+, a Supabase project, an OpenAI key (embeddings),
-an Anthropic key (answers).
+**Prerequisites:** Node 20+, a Supabase project, a Gemini key (embeddings —
+free tier is enough), an Anthropic key (answers).
 
 ```bash
 git clone https://github.com/owaisikhan/Rag-Research-Assistant.git
@@ -106,8 +106,21 @@ npm run corpus:fetch           # downloads PDFs + a metadata manifest
 npm run corpus:ingest          # extract → chunk → embed → store
 ```
 
-`corpus:fetch --limit 20` is a good first run: it proves the pipeline end to
-end in a couple of minutes before you commit to the full set.
+`corpus:fetch -- --limit 20` is a good first run: it proves the pipeline end to
+end before you commit to the full set.
+
+**Ingestion is paced, and that is deliberate.** Gemini's free tier allows 100
+embed requests per minute, and each *text* counts as a request rather than each
+HTTP call — so batching saves round trips and nothing else. `embed.js` holds a
+sliding window against that limit rather than racing into it and backing off,
+because a rejected batch has already spent its quota. Budget roughly a minute
+per 100 chunks: about two documents a minute, so a 300-document library is a
+few hours. Leave it running; it is resumable.
+
+**Interrupting it is safe.** A document's row is written with a sentinel
+`pending:` hash and only gets its real hash once its chunks are stored and
+counted. Anything interrupted mid-flight is retried on the next run rather than
+being mistaken for complete work and skipped.
 
 **3. Run it.**
 

@@ -22,11 +22,29 @@ function record(name, ok, detail, fix) {
 
 // ----------------------------------------------------------- environment
 
+// Which embedding key is needed depends on EMBEDDING_MODEL, so asking for an
+// OpenAI key while the project is configured for Gemini would send someone to
+// buy credit they do not need.
+const EMBEDDING_KEYS = {
+  gemini: ["GEMINI_API_KEY", "aistudio.google.com → API keys (free tier covers embeddings)"],
+  openai: ["OPENAI_API_KEY", "platform.openai.com → API keys (requires billing; no free tier)"],
+  voyage: ["VOYAGE_API_KEY", "dash.voyageai.com → API keys"],
+};
+
+const selectedModel = process.env.EMBEDDING_MODEL || "text-embedding-3-small";
+const selectedProvider = selectedModel.startsWith("gemini")
+  ? "gemini"
+  : selectedModel.startsWith("voyage")
+    ? "voyage"
+    : "openai";
+
+const [embeddingKeyName, embeddingKeyWhere] = EMBEDDING_KEYS[selectedProvider];
+
 const REQUIRED = {
   NEXT_PUBLIC_SUPABASE_URL: "Supabase → Project Settings → Data API → Project URL",
   NEXT_PUBLIC_SUPABASE_ANON_KEY: "Supabase → Project Settings → API Keys → anon / public",
   SUPABASE_SERVICE_ROLE_KEY: "Supabase → Project Settings → API Keys → service_role (keep it local)",
-  OPENAI_API_KEY: "platform.openai.com → API keys (used for embeddings)",
+  [embeddingKeyName]: `${embeddingKeyWhere} — needed by EMBEDDING_MODEL=${selectedModel}`,
   ANTHROPIC_API_KEY: "console.anthropic.com → API keys (used for answers)",
 };
 
@@ -152,7 +170,7 @@ for (const table of ["documents", "chunks"]) {
     );
   } catch (error) {
     record(`embeddings (${EMBEDDING_MODEL})`, false, error.message,
-      "Check OPENAI_API_KEY is valid and the account has credit.");
+      `Check ${embeddingKeyName} is valid and the account is in good standing.`);
   }
 }
 

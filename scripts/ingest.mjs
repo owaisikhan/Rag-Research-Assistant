@@ -23,13 +23,30 @@ loadEnv();
 const { embedDocuments, EMBEDDING_MODEL } = await import("../app/_lib/rag/embed.js");
 const { createAdminClient } = await import("../app/_lib/supabase-auth.js");
 
-// Batch size for the embeddings API. 64 keeps each request well inside token
-// limits while still amortising the round trip.
+// Embedding batch size and pacing depend on the provider's rate limits.
+//
+// Gemini's free tier is generous per day but tight per minute, and it answers
+// a burst with 429 rather than queueing. Measured the hard way: 64-text
+// batches at concurrency 3 exhausted the quota after four documents. Small
+// serial batches with a pause between them finish the same work slower and
+// without failing.
+const isGemini = (process.env.EMBEDDING_MODEL || "").startsWith("gemini");
+
+// Batch size no longer affects the Gemini quota (each text counts), so it is
+// purely a round-trip optimisation. Pacing is handled inside embed.js by a
+// sliding window against the real documented limit.
 const EMBED_BATCH = 64;
-// Rows per insert. Postgres is happy with more; the Supabase client is not.
-const INSERT_BATCH = 200;
-// Concurrent embedding requests. Higher hits rate limits on free tiers.
-const EMBED_CONCURRENCY = 3;
+const EMBED_CONCURRENCY = isGemini ? 1 : 3;
+const EMBED_PACING_MS = 0;
+
+// Rows per insert.
+//
+// NOT a Postgres limit -- a payload limit. Every row carries a 1536-float
+// embedding, which serialises to roughly 18 kB of JSON, so 200 rows is a 4 MB
+// request. That silently failed for longer documents while short ones went
+// through, which is the worst shape of bug: the corpus looked fine and was
+// quietly missing its biggest papers. 50 rows is about 1 MB.
+const INSERT_BATCH = 50;
 
 function parseArgs(argv) {
   const args = { dir: "corpus", force: false };
@@ -90,17 +107,30 @@ async function assertModelConsistency(supabase, force) {
   }
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function embedAll(texts) {
   const batches = [];
   for (let i = 0; i < texts.length; i += EMBED_BATCH) {
     batches.push(texts.slice(i, i + EMBED_BATCH));
   }
 
+  // Serial with a pause when the provider needs pacing; concurrent otherwise.
+  if (EMBED_CONCURRENCY === 1) {
+    const results = [];
+    for (const [index, batch] of batches.entries()) {
+      results.push(await embedDocuments(batch));
+      if (EMBED_PACING_MS > 0 && index < batches.length - 1) {
+        await sleep(EMBED_PACING_MS);
+      }
+    }
+    return results.flat();
+  }
+
   const limit = pLimit(EMBED_CONCURRENCY);
   const results = await Promise.all(
     batches.map((batch) => limit(() => embedDocuments(batch)))
   );
-
   return results.flat();
 }
 
@@ -136,6 +166,19 @@ async function ingestFile(supabase, filePath, manifest, force) {
     );
   }
 
+  // The hash is written in TWO steps, and the order is the whole point.
+  //
+  // Writing the real content_hash alongside the document means a failure
+  // during chunk insertion leaves a row that claims to be fully ingested. The
+  // next run compares hashes, sees a match, and skips it -- forever. The
+  // corpus then contains a document from which not one passage can be
+  // retrieved, and nothing anywhere reports a problem.
+  //
+  // So the row goes in with a sentinel hash that can never match a real one.
+  // Only once the chunks are in and counted is the true hash written. Any
+  // failure in between leaves a mismatch, and the next run retries.
+  const PENDING = `pending:${contentHash}`;
+
   const documentRow = {
     source_id: sourceId,
     title:
@@ -147,7 +190,7 @@ async function ingestFile(supabase, filePath, manifest, force) {
     page_count: pageCount,
     kind: meta.kind ?? "document",
     licence: meta.licence ?? null,
-    content_hash: contentHash,
+    content_hash: PENDING,
     embedding_model: EMBEDDING_MODEL,
     ingested_at: new Date().toISOString(),
   };
@@ -182,8 +225,35 @@ async function ingestFile(supabase, filePath, manifest, force) {
 
   for (let i = 0; i < rows.length; i += INSERT_BATCH) {
     const { error } = await supabase.from("chunks").insert(rows.slice(i, i + INSERT_BATCH));
-    if (error) throw new Error(`Chunk insert failed for ${fileName}: ${error.message}`);
+    if (error) {
+      throw new Error(
+        `Chunk insert failed for ${fileName} at row ${i}: ${error.message}` +
+          ` (the document is left marked incomplete and will be retried)`
+      );
+    }
   }
+
+  // Count what actually landed rather than trusting the inserts. Then, and
+  // only then, commit the real hash.
+  const { count, error: countError } = await supabase
+    .from("chunks")
+    .select("*", { count: "exact", head: true })
+    .eq("document_id", document.id);
+
+  if (countError) throw new Error(`Could not verify chunks for ${fileName}: ${countError.message}`);
+
+  if (count !== chunks.length) {
+    throw new Error(
+      `Chunk count mismatch for ${fileName}: stored ${count}, expected ${chunks.length}.`
+    );
+  }
+
+  const { error: commitError } = await supabase
+    .from("documents")
+    .update({ content_hash: contentHash })
+    .eq("id", document.id);
+
+  if (commitError) throw new Error(`Could not finalise ${fileName}: ${commitError.message}`);
 
   return {
     fileName,
