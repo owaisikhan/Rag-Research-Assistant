@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Corpus PDFs are fetched by script, never committed
+/corpus/*
+!/corpus/.gitkeep
