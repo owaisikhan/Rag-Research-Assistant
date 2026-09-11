@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test tests/",
+    "test": "node --test \"tests/*.test.mjs\"",
     "corpus:fetch": "node scripts/fetch-corpus.mjs",
     "corpus:ingest": "node scripts/ingest.mjs"
   },

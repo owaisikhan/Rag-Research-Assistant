@@ -50,6 +50,16 @@ function isNoise(line) {
 function cleanPage(text, boilerplate) {
   return text
     .split("\n")
+    // Strip control characters before anything else.
+    //
+    // PDF text extraction yields NUL and other C0 controls from embedded fonts
+    // and broken encodings. Postgres `text` cannot store a NUL at all, and
+    // PostgREST rejects the whole insert with "unsupported Unicode escape
+    // sequence" -- naming neither the document nor the character, so it reads
+    // as a database problem rather than one bad byte in one PDF.
+    //
+    // Tab and newline are kept; they carry structure this pipeline relies on.
+    .map((line) => line.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, ""))
     .map((line) => line.replace(/\s+/g, " ").trim())
     .filter((line) => !isNoise(line) && !boilerplate.has(line))
     // Ligatures and hyphenation artefacts that break keyword search.
