@@ -10,7 +10,11 @@
 --    error string, a surname); full-text search alone loses paraphrase. Both
 --    are run and fused with Reciprocal Rank Fusion in match_chunks().
 
-create extension if not exists vector;
+-- Installed into the `extensions` schema rather than `public`: that is the
+-- Supabase convention, and an extension in `public` is flagged by their own
+-- security advisor. The default search_path resolves the `vector` type either
+-- way.
+create extension if not exists vector with schema extensions;
 
 -- ---------------------------------------------------------------- documents
 

@@ -1,0 +1,196 @@
+#!/usr/bin/env node
+// Check the setup end to end and say precisely what is wrong.
+//
+//   node scripts/doctor.mjs
+//
+// Written because the first run is where everything fails at once -- a
+// migration not applied, a key in the wrong variable, the pgvector extension
+// missing -- and the raw errors from three different SDKs do not point at
+// which. Each check below names the fix, not just the symptom.
+
+import { loadEnv } from "./lib/env.mjs";
+
+loadEnv();
+
+const results = [];
+let fatal = false;
+
+function record(name, ok, detail, fix) {
+  results.push({ name, ok, detail, fix });
+  if (!ok && fix) fatal = true;
+}
+
+// ----------------------------------------------------------- environment
+
+const REQUIRED = {
+  NEXT_PUBLIC_SUPABASE_URL: "Supabase → Project Settings → Data API → Project URL",
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: "Supabase → Project Settings → API Keys → anon / public",
+  SUPABASE_SERVICE_ROLE_KEY: "Supabase → Project Settings → API Keys → service_role (keep it local)",
+  OPENAI_API_KEY: "platform.openai.com → API keys (used for embeddings)",
+  ANTHROPIC_API_KEY: "console.anthropic.com → API keys (used for answers)",
+};
+
+for (const [key, where] of Object.entries(REQUIRED)) {
+  const value = process.env[key];
+  record(
+    key,
+    Boolean(value),
+    value ? `set (${value.length} chars)` : "missing",
+    value ? null : `Add ${key} to .env.local — ${where}`
+  );
+}
+
+// A service-role key in the anon slot is a silent catastrophe: it works
+// perfectly in development and hands every visitor full database access.
+const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+const service = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+
+function roleOf(jwt) {
+  try {
+    return JSON.parse(Buffer.from(jwt.split(".")[1], "base64").toString()).role ?? null;
+  } catch {
+    return null;
+  }
+}
+
+if (anon && service) {
+  const anonRole = roleOf(anon);
+  record(
+    "key roles",
+    anonRole !== "service_role",
+    anonRole ? `anon key carries role "${anonRole}"` : "could not decode (new-style keys are opaque — check manually)",
+    anonRole === "service_role"
+      ? "DANGER: the service_role key is in NEXT_PUBLIC_SUPABASE_ANON_KEY. That key ships to every browser and bypasses RLS. Swap them and rotate the exposed key immediately."
+      : null
+  );
+
+  record(
+    "keys differ",
+    anon !== service,
+    anon === service ? "anon and service_role are identical" : "distinct",
+    anon === service ? "The same key is in both slots. Copy the anon key and the service_role key separately." : null
+  );
+}
+
+if (fatal) {
+  report();
+  process.exit(1);
+}
+
+// -------------------------------------------------------------- database
+
+const { createAdminClient } = await import("../app/_lib/supabase-auth.js");
+const supabase = createAdminClient();
+
+for (const table of ["documents", "chunks"]) {
+  const { error, count } = await supabase
+    .from(table)
+    .select("*", { count: "exact", head: true });
+
+  record(
+    `table ${table}`,
+    !error,
+    error ? error.message : `${count ?? 0} rows`,
+    error ? "Run supabase/migrations/001_knowledge_base.sql in the Supabase SQL editor." : null
+  );
+}
+
+// Calling the function is the only honest check that pgvector, the HNSW index
+// and the function signature all line up.
+{
+  const probe = Array.from({ length: 1536 }, () => 0);
+  const { error } = await supabase.rpc("match_chunks", {
+    query_embedding: probe,
+    query_text: "connectivity probe",
+    match_count: 1,
+  });
+
+  const dimensionMismatch = error && /expected \d+ dimensions/i.test(error.message);
+
+  record(
+    "match_chunks()",
+    !error,
+    error ? error.message : "callable",
+    !error
+      ? null
+      : dimensionMismatch
+        ? "The vector column width does not match EMBEDDING_MODEL. Change vector(n) in a migration to match, then re-ingest with --force."
+        : "Run supabase/migrations/001_knowledge_base.sql — the function or the vector extension is missing."
+  );
+}
+
+{
+  const { error } = await supabase.rpc("corpus_stats");
+  record("corpus_stats()", !error, error ? error.message : "callable",
+    error ? "Run supabase/migrations/001_knowledge_base.sql." : null);
+}
+
+{
+  const { error } = await supabase.rpc("check_rate_limit", {
+    caller: "doctor-probe",
+    max_per_hour: 1000,
+  });
+  record("check_rate_limit()", !error, error ? error.message : "callable",
+    error ? "Run supabase/migrations/002_rate_limit.sql." : null);
+}
+
+// ---------------------------------------------------------------- models
+
+{
+  const { EMBEDDING_MODEL, EMBEDDING_DIMENSIONS, embedQuery } = await import(
+    "../app/_lib/rag/embed.js"
+  );
+  try {
+    const vector = await embedQuery("connectivity probe");
+    record(
+      `embeddings (${EMBEDDING_MODEL})`,
+      vector.length === EMBEDDING_DIMENSIONS,
+      `returned ${vector.length} dimensions, schema expects ${EMBEDDING_DIMENSIONS}`,
+      vector.length === EMBEDDING_DIMENSIONS
+        ? null
+        : `Dimension mismatch. Change vector(${EMBEDDING_DIMENSIONS}) to vector(${vector.length}) in a migration.`
+    );
+  } catch (error) {
+    record(`embeddings (${EMBEDDING_MODEL})`, false, error.message,
+      "Check OPENAI_API_KEY is valid and the account has credit.");
+  }
+}
+
+{
+  const Anthropic = (await import("@anthropic-ai/sdk")).default;
+  try {
+    const response = await new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+      .messages.create({
+        model: "claude-haiku-4-5",
+        max_tokens: 16,
+        messages: [{ role: "user", content: "Reply with the single word: ready" }],
+      });
+    const text = response.content.find((b) => b.type === "text")?.text ?? "";
+    record("Anthropic API", true, `responded "${text.trim()}"`, null);
+  } catch (error) {
+    record("Anthropic API", false, error.message,
+      "Check ANTHROPIC_API_KEY is valid and the account has credit.");
+  }
+}
+
+report();
+
+function report() {
+  const pad = Math.max(...results.map((r) => r.name.length));
+  console.log("");
+  for (const result of results) {
+    console.log(`  ${result.ok ? "✓" : "✗"} ${result.name.padEnd(pad)}  ${result.detail}`);
+  }
+
+  const problems = results.filter((r) => !r.ok && r.fix);
+  if (problems.length === 0) {
+    console.log("\nEverything checks out. Next: npm run corpus:fetch -- --limit 20\n");
+    return;
+  }
+
+  console.log(`\n${problems.length} problem${problems.length === 1 ? "" : "s"} to fix:\n`);
+  for (const problem of problems) {
+    console.log(`  ${problem.name}\n    ${problem.fix}\n`);
+  }
+  process.exitCode = 1;
+}
