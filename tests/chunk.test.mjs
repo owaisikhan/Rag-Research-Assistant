@@ -1,0 +1,81 @@
+// Chunking tests. Run with: npm test
+//
+// Chunking is tested rather than retrieval because it is the part that is
+// deterministic and offline, and it decides answer quality. A chunk carrying
+// the wrong page number produces a citation that does not check out, which is
+// worse for trust than no citation at all.
+
+import { test } from "node:test";
+import assert from "node:assert/strict";
+
+import { chunkPages, estimateTokens } from "../scripts/lib/chunk.mjs";
+
+const paragraph = (words) => Array.from({ length: words }, (_, i) => `word${i}`).join(" ");
+
+test("page numbers are carried onto every chunk", () => {
+  const pages = [paragraph(300), paragraph(300), paragraph(300)];
+  const chunks = chunkPages(pages);
+
+  assert.ok(chunks.length > 0, "expected chunks");
+  for (const chunk of chunks) {
+    assert.ok(chunk.pageStart >= 1, "pageStart must be a real page");
+    assert.ok(chunk.pageEnd <= pages.length, "pageEnd cannot exceed the document");
+    assert.ok(chunk.pageEnd >= chunk.pageStart, "page range must not be inverted");
+  }
+});
+
+test("a chunk spanning a page break records both pages", () => {
+  const chunks = chunkPages([paragraph(60), paragraph(60)]);
+  assert.ok(
+    chunks.some((chunk) => chunk.pageEnd > chunk.pageStart),
+    "expected at least one chunk to span the page boundary"
+  );
+});
+
+test("headings become section labels rather than body text", () => {
+  const chunks = chunkPages([
+    ["1 Introduction", paragraph(200)].join("\n"),
+    ["3.5 Positional Encoding", paragraph(200)].join("\n"),
+  ]);
+
+  const sections = chunks.map((chunk) => chunk.section);
+  assert.ok(sections.includes("1 Introduction"), "numbered heading not detected");
+  assert.ok(sections.includes("3.5 Positional Encoding"), "subsection heading not detected");
+
+  for (const chunk of chunks) {
+    assert.ok(!chunk.content.startsWith("1 Introduction"), "heading leaked into content");
+  }
+});
+
+test("the bibliography is excluded", () => {
+  const chunks = chunkPages([
+    ["1 Introduction", paragraph(400)].join("\n"),
+    ["2 Method", paragraph(400)].join("\n"),
+    ["References", "[1] A. Author. A paper title. In Proceedings, 2020."].join("\n"),
+  ]);
+
+  assert.ok(
+    !chunks.some((chunk) => /^references$/i.test(chunk.section ?? "")),
+    "reference entries must not be retrievable -- they match keyword queries and answer nothing"
+  );
+});
+
+test("a document that is entirely references is not discarded", () => {
+  const chunks = chunkPages([["References", paragraph(400)].join("\n")]);
+  assert.ok(chunks.length > 0, "refused to keep any content");
+});
+
+test("chunks stay within the token budget", () => {
+  for (const chunk of chunkPages([paragraph(2000)])) {
+    assert.ok(chunk.tokenCount <= 600, `chunk of ${chunk.tokenCount} tokens exceeds budget`);
+  }
+});
+
+test("empty input produces no chunks rather than throwing", () => {
+  assert.deepEqual(chunkPages([]), []);
+  assert.deepEqual(chunkPages(["", "   "]), []);
+});
+
+test("token estimate is monotonic in length", () => {
+  assert.ok(estimateTokens("a".repeat(400)) > estimateTokens("a".repeat(100)));
+});

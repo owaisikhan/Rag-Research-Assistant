@@ -72,6 +72,61 @@ function findReferencesCutoff(blocks) {
 }
 
 /**
+ * Break a block that is already larger than the whole chunk budget.
+ *
+ * Extraction does not guarantee line breaks: a page can come back as one
+ * unbroken run of text, and such a block would otherwise pass through whole,
+ * producing a chunk several times the budget. That chunk then dominates the
+ * context it appears in and cites a whole page instead of a passage.
+ *
+ * Split on sentence ends first, since those are real semantic boundaries.
+ * A single "sentence" still over budget (a table flattened into one line, a
+ * long formula) falls back to a hard word-count split -- imperfect, but
+ * bounded, which is what matters.
+ */
+function splitOversized(text) {
+  if (estimateTokens(text) <= TARGET_TOKENS) return [text];
+
+  const sentences = text.match(/[^.!?]+[.!?]+(\s|$)|[^.!?]+$/g) ?? [text];
+
+  const pieces = [];
+  let current = "";
+
+  const pushCurrent = () => {
+    const trimmed = current.trim();
+    if (trimmed !== "") pieces.push(trimmed);
+    current = "";
+  };
+
+  for (const sentence of sentences) {
+    if (estimateTokens(sentence) > TARGET_TOKENS) {
+      pushCurrent();
+      // Accumulate words by MEASURED size rather than a words-per-token
+      // guess: a fixed word count overshoots badly on long tokens (chemical
+      // names, hashes, identifiers) and wastes the budget on short ones.
+      let piece = "";
+      for (const word of sentence.split(/\s+/)) {
+        const candidate = piece === "" ? word : `${piece} ${word}`;
+        if (estimateTokens(candidate) > TARGET_TOKENS && piece !== "") {
+          pieces.push(piece);
+          piece = word;
+        } else {
+          piece = candidate;
+        }
+      }
+      if (piece !== "") pieces.push(piece);
+      continue;
+    }
+
+    if (estimateTokens(current + sentence) > TARGET_TOKENS) pushCurrent();
+    current += sentence;
+  }
+
+  pushCurrent();
+  return pieces;
+}
+
+/**
  * Flatten pages into paragraph blocks, each tagged with its page and the
  * nearest heading above it.
  */
@@ -90,7 +145,11 @@ function toBlocks(pages) {
           continue;
         }
         const text = line.trim();
-        if (text.length > 0) blocks.push({ text, page: pageNumber, section });
+        if (text.length === 0) continue;
+
+        for (const piece of splitOversized(text)) {
+          blocks.push({ text: piece, page: pageNumber, section });
+        }
       }
     }
   });
