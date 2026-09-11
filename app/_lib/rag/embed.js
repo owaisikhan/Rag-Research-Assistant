@@ -12,6 +12,8 @@
 
 import OpenAI from "openai";
 
+import { createRateWindow } from "./rate-window.js";
+
 const PROVIDERS = {
   // Gemini lets you ASK for a dimensionality, so it is pinned to 1536 to match
   // the vector(1536) column rather than forcing a migration. 001 is preferred
@@ -114,30 +116,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const GEMINI_LIMIT_PER_MINUTE = Number(process.env.GEMINI_EMBED_RPM || 95);
 const WINDOW_MS = 60_000;
 
-let recentRequests = [];
-
-/**
- * Hold until `count` more requests fit inside the rolling minute.
- *
- * Pacing beforehand rather than reacting to 429s: a rejected batch has already
- * cost its quota, so backing off after the fact is strictly slower than not
- * exceeding the limit in the first place.
- */
-async function reserveQuota(count) {
-  for (;;) {
-    const now = Date.now();
-    recentRequests = recentRequests.filter((at) => now - at < WINDOW_MS);
-
-    if (recentRequests.length + count <= GEMINI_LIMIT_PER_MINUTE) {
-      for (let i = 0; i < count; i++) recentRequests.push(now);
-      return;
-    }
-
-    // Wait until the oldest request falls out of the window.
-    const waitMs = WINDOW_MS - (now - recentRequests[0]) + 250;
-    await sleep(waitMs);
-  }
-}
+const geminiWindow = createRateWindow({ limit: GEMINI_LIMIT_PER_MINUTE, windowMs: WINDOW_MS });
 
 /** Google returns how long to wait; honour it instead of guessing. */
 function retryDelayFrom(payload) {
@@ -166,10 +145,10 @@ async function embedWithGemini(texts, taskType) {
 
   // The free tier rate limits aggressively and recovers quickly, so a few
   // backed-off retries turn a failed overnight ingestion into a slow one.
-  const MAX_ATTEMPTS = 5;
+  const MAX_ATTEMPTS = 8;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    await reserveQuota(texts.length);
+    await geminiWindow.reserve(texts.length);
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${EMBEDDING_MODEL}:batchEmbedContents`,
@@ -209,11 +188,11 @@ async function embedWithGemini(texts, taskType) {
     console.warn(
       `  Gemini ${response.status}; waiting ${Math.round(wait / 1000)}s (attempt ${attempt}/${MAX_ATTEMPTS - 1})`
     );
-    await sleep(wait);
+    // Record the block BEFORE sleeping, so any other in-flight caller sharing
+    // this module waits too rather than walking into the same wall.
+    geminiWindow.block(wait);
 
-    // A 429 means the window is already spent; clear the local view so the
-    // pacer does not believe it has headroom it does not have.
-    recentRequests = [];
+    await sleep(wait);
   }
 
   throw new Error("Unreachable");
