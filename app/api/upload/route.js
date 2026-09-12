@@ -167,12 +167,27 @@ export async function POST(request) {
     // The row is left behind carrying its pending hash rather than deleted, so
     // the failure is visible in the database instead of vanishing. It is
     // excluded from listings and purged with the rest after 24 hours.
-    const quota = /quota|429|exhausted/i.test(error.message);
-    return fail(
-      quota
-        ? "The embedding service is at its limit right now. Please try again shortly."
-        : "That document could not be indexed. Please try another file.",
-      quota ? 429 : 500
-    );
+    // The two quota failures need different sentences, and conflating them is
+    // its own small bug: a per-minute limit clears in under a minute, while a
+    // daily one does not move for hours. Telling someone to "try again
+    // shortly" when the answer is "tomorrow" sends them back to retry against
+    // a wall, and makes the app look broken rather than rationed.
+    if (error.name === "DailyQuotaExhausted") {
+      return fail(
+        "This demo's daily indexing allowance is used up. It resets every 24 hours — " +
+          "come back tomorrow, or ask a question about the existing library, which " +
+          "still works.",
+        429
+      );
+    }
+
+    if (/quota|429|rate/i.test(error.message)) {
+      return fail(
+        "The indexing service is busy for a moment. Try that upload again shortly.",
+        429
+      );
+    }
+
+    return fail("That document could not be indexed. Please try another file.", 500);
   }
 }

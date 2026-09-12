@@ -77,6 +77,17 @@ export async function POST(request) {
     sources = await retrieve(searchQuery, { sessionId });
   } catch (error) {
     console.error("Retrieval failed:", error);
+
+    // Same distinction as the upload path: a daily allowance does not come
+    // back "shortly", and saying so wastes the reader's time.
+    if (error.name === "DailyQuotaExhausted") {
+      return errorResponse(
+        "This demo's daily allowance for searching is used up. It resets every " +
+          "24 hours. Sorry — please come back tomorrow.",
+        429
+      );
+    }
+
     return errorResponse("Could not search the library. Please try again.", 502);
   }
 
