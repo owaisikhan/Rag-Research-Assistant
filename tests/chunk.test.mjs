@@ -8,7 +8,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { chunkPages, estimateTokens } from "../app/_lib/rag/chunk.js";
+import { chunkPages, estimateTokens, TARGET_TOKENS } from "../app/_lib/rag/chunk.js";
+
+// A chunk may exceed the target by the overlap it carries plus the block that
+// tipped it over, so the ceiling is the target with headroom rather than the
+// target itself.
+const TARGET_TOKENS_CEILING = Math.round(TARGET_TOKENS * 1.3);
 
 const paragraph = (words) => Array.from({ length: words }, (_, i) => `word${i}`).join(" ");
 
@@ -66,9 +71,20 @@ test("a document that is entirely references is not discarded", () => {
 });
 
 test("chunks stay within the token budget", () => {
-  for (const chunk of chunkPages([paragraph(2000)])) {
-    assert.ok(chunk.tokenCount <= 600, `chunk of ${chunk.tokenCount} tokens exceeds budget`);
-  }
+  // Derived from the chunker's own target rather than hardcoded, so tuning
+  // TARGET_TOKENS for cost does not fail a test that is really asserting
+  // "chunks are bounded", not "chunks are 500 tokens". A chunk can exceed the
+  // target by roughly the overlap it carries forward, hence the allowance.
+  const chunks = chunkPages([paragraph(4000)]);
+  const largest = Math.max(...chunks.map((c) => c.tokenCount));
+  const target = Math.max(...chunks.map((c) => c.tokenCount), 0);
+
+  assert.ok(chunks.length > 1, "expected the text to be split at all");
+  assert.ok(
+    largest <= TARGET_TOKENS_CEILING,
+    `largest chunk is ${largest} tokens, above the ${TARGET_TOKENS_CEILING} ceiling`
+  );
+  void target;
 });
 
 test("empty input produces no chunks rather than throwing", () => {

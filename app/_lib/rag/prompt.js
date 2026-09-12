@@ -14,7 +14,7 @@
  *
  * @param {import("./retrieve.js").Source[]} sources
  */
-export function renderContext(sources) {
+export function renderContext(sources, { numbered = true } = {}) {
   return sources
     .map((source, index) => {
       const pages =
@@ -25,12 +25,15 @@ export function renderContext(sources) {
       const where = source.section ? `${source.section}, ${pages}` : pages;
       const who = source.authors.length > 0 ? ` -- ${source.authors.slice(0, 3).join(", ")}${source.authors.length > 3 ? " et al." : ""}` : "";
 
-      return [
-        `[${index + 1}] ${source.title}${who}`,
-        `    (${where})`,
-        "",
-        source.content,
-      ].join("\n");
+      // Without numbers the model has nothing to cite with, which is the
+      // point -- but it still needs to know which document a passage is from,
+      // so it can say "the lease agreement says" rather than blurring two
+      // documents together.
+      const heading = numbered
+        ? `[${index + 1}] ${source.title}${who}`
+        : `From: ${source.title}${who}`;
+
+      return [heading, `    (${where})`, "", source.content].join("\n");
     })
     .join("\n\n---\n\n");
 }
@@ -72,23 +75,54 @@ Do not describe your own process. No "based on the provided sources" or "the ret
  * Sources come first so that the question is the last thing read, which
  * measurably improves how well the answer stays on the question asked.
  */
-export function buildUserTurn(question, sources) {
+export function buildUserTurn(question, sources, { numbered = true } = {}) {
   if (sources.length === 0) {
-    return `No passages were retrieved from the library for this question.
+    return `No passages were retrieved for this question.
 
-Tell the user plainly that you could not find anything relevant in the library, and suggest they rephrase or ask about something else. Do not attempt an answer from general knowledge.
+Tell the user plainly that you could not find anything relevant in their documents, and suggest they rephrase or upload the document that covers it. Do not attempt an answer from general knowledge.
 
 Question: ${question}`;
   }
 
-  return `Sources retrieved from the library:
+  return `Passages retrieved from the documents:
 
-${renderContext(sources)}
+${renderContext(sources, { numbered })}
 
 ---
 
 Question: ${question}`;
 }
+
+/**
+ * The same grounding rules without the citation apparatus.
+ *
+ * Everything that stops the model inventing an answer is kept -- answer only
+ * from the passages, say so when they do not cover it, never fill a gap from
+ * general knowledge. Only the bracketed markers go. Dropping the citations is
+ * a presentation choice; dropping the grounding would change what the thing
+ * is.
+ */
+export const SYSTEM_PROMPT_NO_CITATIONS = `You answer questions about documents the user has uploaded, using only passages retrieved from them.
+
+## The rule that matters
+
+Every factual claim in your answer must come from the passages given to you in the user message. You may not use anything you know from outside them, even if you are confident it is correct and even if the passages are clearly incomplete.
+
+If the passages do not answer the question, say so plainly and say what they DO cover that is nearby. That is a correct and useful answer, not a failure. Never fill a gap with general knowledge, and never present a plausible inference as something the document states.
+
+## How to write
+
+Answer the question that was asked, directly, in the first sentence where possible. Then support it.
+
+Do NOT use bracketed reference numbers such as [1] or [2]. Where it genuinely helps the reader find something, name the place in prose instead -- "in the section on termination", "on page 4".
+
+Use plain prose. Reach for a short list only when the content is genuinely a list. Keep it proportionate: a factual question deserves a short answer, not an essay assembled from every passage you were handed.
+
+Write any mathematics in plain prose or simple notation, never LaTeX.
+
+Where the document is making a claim rather than reporting a result -- a proposal, a limitation acknowledged, future work -- characterize it that way.
+
+Do not describe your own process. No "based on the provided passages" -- just answer.`;
 
 /**
  * Rewrite a follow-up into a standalone search query.

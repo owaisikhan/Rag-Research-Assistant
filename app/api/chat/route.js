@@ -17,6 +17,7 @@ import { retrieve } from "@/app/_lib/rag/retrieve";
 import { streamAnswer, rewriteQuery } from "@/app/_lib/rag/answer";
 import { checkRateLimit, validateChatRequest } from "@/app/_lib/rag/limits";
 import { ensureSessionId } from "@/app/_lib/session";
+import { siteConfig } from "@/app/_lib/siteConfig";
 
 // Node runtime: the embedding and Anthropic SDKs and node:crypto all want it.
 export const runtime = "nodejs";
@@ -96,6 +97,10 @@ export async function POST(request) {
   const stream = new ReadableStream({
     async start(controller) {
       try {
+        // With citations off there is no panel to fill, so the event is
+        // skipped entirely rather than sent and ignored -- it is the largest
+        // thing on the wire, and the browser would only discard it.
+        if (siteConfig.mode.showCitations) {
         // Trimmed: the browser needs everything to render a citation, but not
         // the passage text, which is already going to the model.
         controller.enqueue(
@@ -116,6 +121,7 @@ export async function POST(request) {
             })),
           })
         );
+        }
 
         for await (const text of streamAnswer({ question, sources, history })) {
           controller.enqueue(line({ type: "delta", text }));

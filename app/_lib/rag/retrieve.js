@@ -2,6 +2,7 @@ import "server-only";
 
 import { embedQuery } from "./embed.js";
 import { createClient } from "../supabase-server.js";
+import { siteConfig } from "../siteConfig.js";
 
 // How many chunks reach the model. Twelve at ~450 tokens is ~5.4k tokens of
 // context: enough that the answer is rarely starved, small enough that the
@@ -54,6 +55,9 @@ export async function retrieve(question, { matchCount = MATCH_COUNT, sessionId =
     query_text: trimmed,
     match_count: matchCount,
     p_session: sessionId,
+    // When the curated library is switched off, the assistant answers only
+    // from what this visitor uploaded. The library stays in the database.
+    include_demo: siteConfig.mode.includeDemoCorpus,
   });
 
   if (error) {

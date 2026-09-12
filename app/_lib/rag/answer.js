@@ -2,7 +2,13 @@ import "server-only";
 
 import Anthropic from "@anthropic-ai/sdk";
 
-import { SYSTEM_PROMPT, buildUserTurn, QUERY_REWRITE_SYSTEM } from "./prompt.js";
+import {
+  SYSTEM_PROMPT,
+  SYSTEM_PROMPT_NO_CITATIONS,
+  buildUserTurn,
+  QUERY_REWRITE_SYSTEM,
+} from "./prompt.js";
+import { siteConfig } from "../siteConfig.js";
 import { streamGemini } from "./providers/gemini-chat.js";
 
 // Which model writes the answer.
@@ -111,15 +117,22 @@ export async function rewriteQuery(question, history) {
  * @returns {AsyncGenerator<string>}
  */
 export async function* streamAnswer({ question, sources, history }) {
+  const withCitations = siteConfig.mode.showCitations;
+
   const messages = [
     ...history.map((turn) => ({ role: turn.role, content: turn.content })),
-    { role: "user", content: buildUserTurn(question, sources) },
+    {
+      role: "user",
+      content: buildUserTurn(question, sources, { numbered: withCitations }),
+    },
   ];
+
+  const system = withCitations ? SYSTEM_PROMPT : SYSTEM_PROMPT_NO_CITATIONS;
 
   if (isGeminiAnswer) {
     yield* streamGemini({
       model: MODEL,
-      system: SYSTEM_PROMPT,
+      system,
       messages,
       maxTokens: MAX_TOKENS,
     });
@@ -129,7 +142,7 @@ export async function* streamAnswer({ question, sources, history }) {
   const stream = anthropic().beta.messages.stream({
     model: MODEL,
     max_tokens: MAX_TOKENS,
-    system: SYSTEM_PROMPT,
+    system,
     output_config: { effort: EFFORT },
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",

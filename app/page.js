@@ -16,9 +16,15 @@ function formatNumber(value) {
 }
 
 export default async function HomePage() {
-  const stats = isConfigured
-    ? await getCorpusStats()
-    : { documentCount: 0, chunkCount: 0, pageCount: 0, kinds: {} };
+  // Only meaningful when the curated library is part of the search. With it
+  // switched off the header would otherwise advertise a corpus the assistant
+  // does not read.
+  const showLibrary = siteConfig.mode.includeDemoCorpus;
+
+  const stats =
+    isConfigured && showLibrary
+      ? await getCorpusStats()
+      : { documentCount: 0, chunkCount: 0, pageCount: 0, kinds: {} };
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 lg:py-12">
@@ -27,7 +33,7 @@ export default async function HomePage() {
           <h1 className="text-xl font-semibold tracking-tight text-ink">
             {siteConfig.name}
           </h1>
-          {stats.documentCount > 0 && (
+          {showLibrary && stats.documentCount > 0 && (
             <p className="text-xs text-ink-faint">
               {formatNumber(stats.documentCount)} documents ·{" "}
               {formatNumber(stats.pageCount)} pages ·{" "}
@@ -37,7 +43,7 @@ export default async function HomePage() {
         </div>
 
         <p className="mt-1.5 max-w-2xl text-sm text-ink-muted">
-          {siteConfig.tagline} {siteConfig.corpus.blurb}
+          {showLibrary ? `${siteConfig.tagline} ${siteConfig.corpus.blurb}` : siteConfig.tagline}
         </p>
       </header>
 
@@ -48,10 +54,10 @@ export default async function HomePage() {
           migrations, then <code>node scripts/fetch-corpus.mjs</code> and{" "}
           <code>node scripts/ingest.mjs</code>. The README has the full sequence.
         </Callout>
-      ) : stats.documentCount === 0 ? (
+      ) : showLibrary && stats.documentCount === 0 ? (
         <Callout tone="info">
-          The library is empty. Run <code>node scripts/fetch-corpus.mjs</code>{" "}
-          then <code>node scripts/ingest.mjs</code> to populate it.
+          The library is empty. Run <code>npm run corpus:fetch</code> then{" "}
+          <code>npm run corpus:ingest</code> to populate it.
         </Callout>
       ) : (
         <ChatPanel />
@@ -59,8 +65,9 @@ export default async function HomePage() {
 
       <footer className="mt-12 border-t border-border pt-5 text-xs text-ink-faint">
         <p>
-          Answers are generated from retrieved passages only. Citations link to
-          the page they came from — check them.
+          {siteConfig.mode.showCitations
+            ? "Answers are generated from retrieved passages only. Citations link to the page they came from — check them."
+            : "Answers are generated only from the documents you upload. Uploads are private to you and are deleted after 24 hours."}
         </p>
       </footer>
     </main>

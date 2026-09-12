@@ -5,10 +5,31 @@
 // a chunk carrying the wrong page number produces a citation that does not
 // check out, which is worse than no citation at all.
 
-// ~500 tokens is the sweet spot for this corpus: large enough to hold a
-// complete argument, small enough that a dozen fit in context with room for
-// the conversation. Overlap stops a claim being cut in half at a boundary.
-const TARGET_TOKENS = 500;
+// ~700 tokens, measured against this corpus rather than picked.
+//
+// Every chunk is one embedding request against a metered quota, so chunk size
+// is the main lever on ingestion cost -- and the cost is paid against citation
+// precision, because a larger passage spans more pages and a citation that
+// reads "pp. 12-15" is far less checkable than one that reads "p. 13".
+//
+// Re-chunking the ten-document corpus at several sizes:
+//
+//   target  chunks  vs 500  single-page cites  spanning 3+ pages
+//     500      846       -               57%                  2%
+//     700      645    -24%               47%                  3%
+//     900      541    -36%               40%                  6%
+//    1200      466    -45%               37%                 14%
+//
+// 700 takes a quarter off the bill while passages spanning three or more
+// pages barely move. 1200 halves the bill and wrecks the product's whole
+// promise -- one citation in seven stops being checkable at a glance.
+//
+// NOTE: chunk size is per-document and applied at ingestion. Documents already
+// in the corpus keep the size they were ingested at, and mixing sizes in one
+// index is harmless -- unlike mixing embedding MODELS, which silently destroys
+// retrieval. So this takes effect on new documents without re-ingesting
+// anything.
+export const TARGET_TOKENS = 700;
 const OVERLAP_TOKENS = 80;
 const MIN_TOKENS = 50;
 

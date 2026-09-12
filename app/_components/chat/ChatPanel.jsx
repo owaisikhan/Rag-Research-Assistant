@@ -5,6 +5,7 @@ import { useRef, useState, useEffect } from "react";
 import AnswerText from "./AnswerText";
 import SourceCard from "./SourceCard";
 import UploadPanel from "./UploadPanel";
+import { siteConfig } from "@/app/_lib/siteConfig";
 import Spinner from "../ui/Spinner";
 import Callout from "../ui/Callout";
 
@@ -155,31 +156,43 @@ export default function ChatPanel() {
         <div className="flex-1 space-y-5">
           {messages.length === 0 && (
             <div className="rounded-xl border border-border bg-surface-raised p-5">
-              <p className="text-sm text-ink-muted">
-                {documents.length > 0
-                  ? "Ask about your uploaded documents or the demo library — both are searched together, and every claim is numbered so you can check it."
-                  : "Ask anything about the library. Every answer is built only from passages retrieved out of the documents, and every claim is numbered so you can check it."}
-              </p>
-              <ul className="mt-4 space-y-2">
-                {(documents.length > 0
-                  ? [
+              {documents.length === 0 ? (
+                <>
+                  <p className="text-sm text-ink">
+                    Upload a PDF to get started.
+                  </p>
+                  <p className="mt-1.5 text-sm text-ink-muted">
+                    Ask anything about it and the answer will be built only from
+                    what is actually in your document — never from outside it.
+                    Nothing is stored beyond 24 hours, and only you can see what
+                    you upload.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-ink-muted">
+                    Ask anything about your {documents.length === 1 ? "document" : "documents"}.
+                    Answers come only from what is in them.
+                  </p>
+                  <ul className="mt-4 space-y-2">
+                    {[
                       `What is ${documents[0].title} about?`,
-                      "What are the key points in my uploaded document?",
-                      "Does my document agree with the research in the library?",
-                    ]
-                  : SUGGESTIONS
-                ).map((suggestion) => (
-                  <li key={suggestion}>
-                    <button
-                      type="button"
-                      onClick={() => ask(suggestion)}
-                      className="w-full rounded-lg border border-border px-3 py-2 text-left text-sm text-ink transition-colors hover:border-primary hover:bg-primary-soft"
-                    >
-                      {suggestion}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+                      "What are the key points?",
+                      "Is there anything here I should be careful about?",
+                    ].map((suggestion) => (
+                      <li key={suggestion}>
+                        <button
+                          type="button"
+                          onClick={() => ask(suggestion)}
+                          className="w-full rounded-lg border border-border px-3 py-2 text-left text-sm text-ink transition-colors hover:border-primary hover:bg-primary-soft"
+                        >
+                          {suggestion}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </div>
           )}
 
@@ -241,13 +254,13 @@ export default function ChatPanel() {
                   ask(input);
                 }
               }}
-              placeholder="Ask a question about the library…"
-              disabled={isStreaming}
+              placeholder={documents.length === 0 ? "Upload a PDF first…" : "Ask a question about your documents…"}
+              disabled={isStreaming || documents.length === 0}
               className="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-ink outline-none placeholder:text-ink-faint disabled:opacity-60"
             />
             <button
               type="submit"
-              disabled={isStreaming || input.trim() === ""}
+              disabled={isStreaming || input.trim() === "" || documents.length === 0}
               className="rounded-lg bg-primary px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
             >
               {isStreaming ? "…" : "Ask"}
@@ -260,32 +273,36 @@ export default function ChatPanel() {
       <aside className="lg:sticky lg:top-6 lg:self-start">
         <UploadPanel documents={documents} onChange={refreshDocuments} />
 
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
-          Sources
-          {visibleSources.length > 0 && (
-            <span className="ml-1.5 font-normal normal-case tracking-normal">
-              ({visibleSources.length} passages)
-            </span>
-          )}
-        </h2>
+        {siteConfig.mode.showCitations && (
+          <>
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+              Sources
+              {visibleSources.length > 0 && (
+                <span className="ml-1.5 font-normal normal-case tracking-normal">
+                  ({visibleSources.length} passages)
+                </span>
+              )}
+            </h2>
 
-        {visibleSources.length === 0 ? (
-          <p className="mt-3 text-sm text-ink-faint">
-            The passages behind each answer appear here, with page numbers.
-          </p>
-        ) : (
-          <ul className="mt-3 space-y-2">
-            {visibleSources.map((source) => (
-              <SourceCard
-                key={source.chunkId}
-                source={source}
-                isActive={activeCitation === source.number}
-                onSelect={(number) =>
-                  setActiveCitation((current) => (current === number ? null : number))
-                }
-              />
-            ))}
-          </ul>
+            {visibleSources.length === 0 ? (
+              <p className="mt-3 text-sm text-ink-faint">
+                The passages behind each answer appear here, with page numbers.
+              </p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {visibleSources.map((source) => (
+                  <SourceCard
+                    key={source.chunkId}
+                    source={source}
+                    isActive={activeCitation === source.number}
+                    onSelect={(number) =>
+                      setActiveCitation((current) => (current === number ? null : number))
+                    }
+                  />
+                ))}
+              </ul>
+            )}
+          </>
         )}
       </aside>
     </div>

@@ -3,7 +3,7 @@
 
 export const siteConfig = {
   name: "Cited",
-  tagline: "Ask your documents. Get answers with receipts.",
+  tagline: "Upload a PDF and ask questions about it.",
   description:
     "A retrieval-augmented research assistant. Every answer is built only " +
     "from passages retrieved out of the source documents, and every claim " +
@@ -25,6 +25,31 @@ export const siteConfig = {
     site: "",
     github: "",
     linkedin: "",
+  },
+
+  // What the app IS, as configuration rather than as scattered conditionals.
+  //
+  // Both default to the fuller behaviour and are switched off by env var, so
+  // nothing is deleted and either can come back in one line. The citation
+  // machinery in particular is the most distinctive part of this codebase --
+  // turning it off is a product decision, not a reason to throw the code away.
+  mode: {
+    // Server-only: retrieval and the page header read this, both of which run
+    // on the server, so it needs no NEXT_PUBLIC_ prefix.
+    //
+    // false = the assistant answers only from what this visitor uploaded. The
+    // curated library stays in the database, simply not searched.
+    includeDemoCorpus: process.env.INCLUDE_DEMO_CORPUS !== "false",
+
+    // NEXT_PUBLIC_ because ChatPanel is a client component and reads it.
+    //
+    // Without the prefix the value is stripped from the browser bundle, so the
+    // server renders one thing and the client renders another -- the sources
+    // panel reappears after hydration and React throws error #418. The failure
+    // is confusing precisely because the server half is correct.
+    //
+    // false = no [1] markers in answers, no citation chips, no sources panel.
+    showCitations: process.env.NEXT_PUBLIC_SHOW_CITATIONS !== "false",
   },
 
   // Hard ceilings for the public demo. See app/_lib/rag/limits.js.

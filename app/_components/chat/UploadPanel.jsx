@@ -97,7 +97,9 @@ export default function UploadPanel({ documents, onChange }) {
               Choose a PDF
             </label>
             <p className="mt-1 text-xs text-ink-faint">
-              or drop one here — up to 10 MB and 60 pages
+              or drop one here — up to 10 MB. Short documents index fastest;
+              anything too long to index is refused straight away rather than
+              left to time out.
             </p>
           </>
         )}
@@ -139,7 +141,8 @@ export default function UploadPanel({ documents, onChange }) {
 
       {documents.length === 0 && !isUploading && (
         <p className="mt-3 text-xs text-ink-faint">
-          Uploads are private to you and are searched alongside the demo library.
+          Nothing is shared. Your uploads are visible only to you and are
+          deleted automatically after 24 hours.
         </p>
       )}
     </section>
