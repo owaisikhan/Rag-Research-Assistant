@@ -13,7 +13,7 @@
 
 import { getOutline } from "@/app/_lib/rag/summarize";
 import { streamSummary } from "@/app/_lib/rag/answer";
-import { checkRateLimit } from "@/app/_lib/rag/limits";
+import { checkRateLimit, refundRateLimit } from "@/app/_lib/rag/limits";
 import { readSessionId } from "@/app/_lib/session";
 
 export const runtime = "nodejs";
@@ -73,17 +73,21 @@ export async function POST(request) {
     outline = await getOutline(documentId, { sessionId });
   } catch (error) {
     console.error("Outline failed:", error);
+    await refundRateLimit(request);
     return errorResponse("Could not read that document. Please try again.", 502);
   }
 
   // Missing, someone else's, and still-indexing all land here with the same
   // message. Telling them apart would confirm to a prober which ids exist.
   if (!outline) {
+    await refundRateLimit(request);
     return errorResponse(
       "That document is not available. It may have expired, or still be indexing.",
       404
     );
   }
+
+  let emittedAnswer = false;
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -109,10 +113,14 @@ export async function POST(request) {
           );
 
         for await (const text of streamSummary({ outline })) {
+          emittedAnswer = true;
           controller.enqueue(line({ type: "delta", text }));
         }
       } catch (error) {
         console.error("Summary generation failed:", error);
+
+        // Refunded only when nothing was written.
+        if (!emittedAnswer) await refundRateLimit(request);
 
         const message =
           error.name === "DailyQuotaExhausted"

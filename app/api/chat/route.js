@@ -15,7 +15,7 @@
 
 import { retrieve } from "@/app/_lib/rag/retrieve";
 import { streamAnswer, rewriteQuery } from "@/app/_lib/rag/answer";
-import { checkRateLimit, validateChatRequest } from "@/app/_lib/rag/limits";
+import { checkRateLimit, refundRateLimit, validateChatRequest } from "@/app/_lib/rag/limits";
 import { ensureSessionId } from "@/app/_lib/session";
 
 // Node runtime: the embedding and Anthropic SDKs and node:crypto all want it.
@@ -80,6 +80,9 @@ export async function POST(request) {
   } catch (error) {
     console.error("Retrieval failed:", error);
 
+    // This request bought nothing, so it should not have cost a slot.
+    await refundRateLimit(request);
+
     // Same distinction as the upload path: a daily allowance does not come
     // back "shortly", and saying so wastes the reader's time.
     if (error.name === "DailyQuotaExhausted") {
@@ -92,6 +95,8 @@ export async function POST(request) {
 
     return errorResponse("Could not search the library. Please try again.", 502);
   }
+
+  let emittedAnswer = false;
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -124,10 +129,15 @@ export async function POST(request) {
         );
 
         for await (const text of streamAnswer({ question, sources, history })) {
+          emittedAnswer = true;
           controller.enqueue(line({ type: "delta", text }));
         }
       } catch (error) {
         console.error("Answer generation failed:", error);
+
+        // Refunded only when nothing was written. A partial answer is not
+        // refunded: the visitor got something, and the call was billed.
+        if (!emittedAnswer) await refundRateLimit(request);
 
         // The sources are already rendered at this point, so a bare "try
         // again" reads as though the whole thing broke. Say which half did.

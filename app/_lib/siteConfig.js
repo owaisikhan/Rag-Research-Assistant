@@ -53,7 +53,13 @@ export const siteConfig = {
 
   // Hard ceilings for the public demo. See app/_lib/rag/limits.js.
   demo: {
-    questionsPerHour: 12,
+    // Questions per hour, per caller. 0 DISABLES the limiter entirely.
+    //
+    // Disabling is for testing only: this app calls a metered API on behalf of
+    // anyone who can reach it, so a public deployment with no limiter is an
+    // unbounded bill waiting for one bored visitor. Set
+    // DEMO_QUESTIONS_PER_HOUR=0 locally; never on the deployment.
+    questionsPerHour: Number(process.env.DEMO_QUESTIONS_PER_HOUR ?? 12),
     maxQuestionLength: 500,
     maxTurnsKept: 6,
   },

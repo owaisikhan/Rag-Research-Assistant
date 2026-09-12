@@ -19,10 +19,29 @@ function hashCaller(request) {
   return createHash("sha256").update(`${salt}:${ip}`).digest("hex");
 }
 
+let warned = false;
+
+/** Say it once per process, not once per request. */
+function warnLimiterOff() {
+  if (warned) return;
+  warned = true;
+  console.warn(
+    "[limits] RATE LIMITER IS OFF (DEMO_QUESTIONS_PER_HOUR=0). " +
+      "Fine locally; on a public deployment this is an unbounded API bill."
+  );
+}
+
 /**
  * @returns {Promise<{allowed: boolean, remaining: number, resetsAt: string|null}>}
  */
 export async function checkRateLimit(request) {
+  // 0 means off. Returned before touching the database, so a local test run
+  // does not depend on Supabase being reachable either.
+  if (siteConfig.demo.questionsPerHour <= 0) {
+    warnLimiterOff();
+    return { allowed: true, remaining: Infinity, resetsAt: null };
+  }
+
   const supabase = await createClient();
 
   const { data, error } = await supabase.rpc("check_rate_limit", {
@@ -81,4 +100,31 @@ export function validateChatRequest(body) {
     }));
 
   return { ok: true, question, history };
+}
+
+/**
+ * Give back the slot a request spent, when that request produced nothing.
+ *
+ * check_rate_limit spends atomically -- it has to, or two simultaneous
+ * requests both read "11 used" and both proceed. But that means a request
+ * which dies afterwards, for reasons the visitor had no part in (the daily
+ * model quota is gone, retrieval failed), still costs one of their twelve.
+ * Twelve failures in a row and the hour is spent with nothing to show for it,
+ * which is exactly how this was noticed.
+ *
+ * So the spend is refunded when, and only when, the request yielded no answer
+ * at all. A partial answer is not refunded: the visitor got something and the
+ * call was billed.
+ */
+export async function refundRateLimit(request) {
+  if (siteConfig.demo.questionsPerHour <= 0) return;
+
+  try {
+    const supabase = await createClient();
+    await supabase.rpc("refund_rate_limit", { caller: hashCaller(request) });
+  } catch (error) {
+    // A failed refund must never turn one failure into two. The visitor has
+    // already been told what went wrong; losing a slot is the lesser problem.
+    console.error("Rate limit refund failed:", error.message);
+  }
 }

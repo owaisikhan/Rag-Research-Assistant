@@ -66,7 +66,6 @@ export default function ChatPanel() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
-  const [error, setError] = useState(null);
   const [activeCitation, setActiveCitation] = useState(null);
   const [documents, setDocuments] = useState([]);
   const [pendingFile, setPendingFile] = useState(null);
@@ -96,10 +95,27 @@ export default function ChatPanel() {
    * says. One reader means a fix to stream handling cannot land on one path
    * and miss the other.
    */
+  /**
+   * Attach a failure to the turn it belongs to.
+   *
+   * A page-level error banner was wrong twice over: two failed questions left
+   * two blank assistant turns in the transcript with no sign of what happened
+   * to them, and the banner only ever showed the most recent message, so the
+   * earlier failure vanished entirely. The failure belongs to the turn.
+   */
+  function failTurn(message) {
+    setMessages((current) => {
+      const next = [...current];
+      const last = next[next.length - 1];
+      if (last?.role !== "assistant") return current;
+      next[next.length - 1] = { ...last, error: message };
+      return next;
+    });
+  }
+
   async function run({ url, body, userText, waiting }) {
     if (isStreaming) return;
 
-    setError(null);
     setActiveCitation(null);
     setIsStreaming(true);
 
@@ -131,11 +147,11 @@ export default function ChatPanel() {
             return next;
           });
         } else if (event.type === "error") {
-          setError(event.message);
+          failTurn(event.message);
         }
       }
     } catch {
-      setError("The connection dropped. Please try again.");
+      failTurn("The connection dropped. Please try again.");
     } finally {
       setIsStreaming(false);
       inputRef.current?.focus();
@@ -190,7 +206,6 @@ export default function ChatPanel() {
       return;
     }
     setMessages([]);
-    setError(null);
     setActiveCitation(null);
     notify("Conversation cleared.", { tone: "success" });
   }
@@ -287,6 +302,8 @@ export default function ChatPanel() {
                 <div key={index} className="group max-w-none">
                   {message.content === "" && isStreaming ? (
                     <Spinner label={message.waiting ?? "Working"} />
+                  ) : message.content === "" && message.error ? (
+                    <Callout tone="danger">{message.error}</Callout>
                   ) : (
                     <>
                       <AnswerText
@@ -297,6 +314,14 @@ export default function ChatPanel() {
                       />
                       {isStreaming && index === messages.length - 1 && (
                         <span className="streaming-caret" aria-hidden="true" />
+                      )}
+
+                      {/* A partial answer that then failed: the text is kept,
+                          and the reason it stops is said underneath it. */}
+                      {message.error && message.content !== "" && (
+                        <div className="mt-3">
+                          <Callout tone="danger">{message.error}</Callout>
+                        </div>
                       )}
 
                       {message.content !== "" && (
@@ -321,7 +346,6 @@ export default function ChatPanel() {
               )
             )}
 
-            {error && <Callout tone="danger">{error}</Callout>}
             <div ref={endRef} />
           </div>
 

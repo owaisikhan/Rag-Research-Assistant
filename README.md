@@ -319,6 +319,35 @@ documents the visitor was promised were private.
 Desktop is tuned; mobile currently degrades rather than being designed. It does
 not overflow at 390px, but it has not had a layout pass.
 
+## Rate limiting
+
+Twelve questions per hour per caller, counted in Postgres rather than in
+memory: every Vercel function instance would keep its own counter, so the real
+limit would become (limit x instances) and a burst would walk straight past it.
+Callers are identified by a salted hash of their IP, never the IP.
+
+**A failed request does not cost a slot.** The spend is atomic — it has to be,
+or two simultaneous requests both read "11 used" and both proceed — but a
+request that dies *after* the spend, for reasons the visitor had no part in
+(the daily model quota is gone, retrieval failed), is refunded. This was found
+the hard way: with the model's daily quota exhausted, twelve failed questions
+spent the whole hour and produced nothing, and the app then blamed the visitor
+for asking too much. A partial answer is not refunded — the visitor got
+something and the call was billed.
+
+### Turning it off for testing
+
+```
+DEMO_QUESTIONS_PER_HOUR=0
+```
+
+Local testing only. This app calls a metered API on behalf of anyone who can
+reach it, so a public deployment with no limiter is an unbounded bill waiting
+for one bored visitor. The server logs a warning on every boot while it is off,
+and the default if the variable is unset is 12 — so forgetting to set it back
+locally is harmless, and forgetting to remove it from a deployment is the thing
+to watch.
+
 ## Adding your own documents
 
 Drop PDFs into `corpus/` and run `npm run corpus:ingest`. Anything already
