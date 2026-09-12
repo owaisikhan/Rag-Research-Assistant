@@ -58,6 +58,46 @@ for (const [key, where] of Object.entries(REQUIRED)) {
   );
 }
 
+// Non-ASCII characters in a credential are almost always a paste artefact, and
+// the failure they cause is genuinely baffling: the Supabase client puts these
+// values into HTTP headers, headers may only hold characters 0-255, and the
+// browser reports "Cannot convert argument to a ByteString because the
+// character at index 8 has a value of 8226" -- naming neither the variable nor
+// the character, and pointing at whichever line happened to log it.
+//
+// A bullet, a curly quote, an en dash or a non-breaking space is all it takes.
+const INVISIBLE = {
+  0x2022: "a bullet (•)",
+  0x2013: "an en dash (–)",
+  0x2014: "an em dash (—)",
+  0x201c: "a curly quote (“)",
+  0x201d: "a curly quote (”)",
+  0x00a0: "a non-breaking space",
+  0x200b: "a zero-width space",
+  0xfeff: "a byte-order mark",
+};
+
+for (const key of Object.keys(REQUIRED)) {
+  const value = process.env[key];
+  if (!value) continue;
+
+  const index = [...value].findIndex((character) => character.charCodeAt(0) > 127);
+  if (index === -1) continue;
+
+  const code = value.charCodeAt(index);
+  const what = INVISIBLE[code] ?? `character U+${code.toString(16).toUpperCase().padStart(4, "0")}`;
+
+  record(
+    `${key} is plain text`,
+    false,
+    `contains ${what} at position ${index}`,
+    `${key} has a non-ASCII character at position ${index} -- ${what}. It was ` +
+      `almost certainly introduced by copying and pasting. Retype or re-copy ` +
+      `that line in .env.local. The value should contain only letters, digits ` +
+      `and plain punctuation.\n    Context: ...${value.slice(Math.max(0, index - 6), index + 7)}...`
+  );
+}
+
 // A service-role key in the anon slot is a silent catastrophe: it works
 // perfectly in development and hands every visitor full database access.
 const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
