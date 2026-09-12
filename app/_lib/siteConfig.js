@@ -2,12 +2,11 @@
 // tokens in globals.css, and a fresh Supabase project -- no grep required.
 
 export const siteConfig = {
-  name: "Cited",
+  name: "Folio",
   tagline: "Upload a PDF and ask questions about it.",
   description:
-    "A retrieval-augmented research assistant. Every answer is built only " +
-    "from passages retrieved out of the source documents, and every claim " +
-    "links back to the page it came from.",
+    "Upload a PDF and ask questions about it. Every answer is built only from " +
+    "passages retrieved out of your own document — never from outside it.",
 
   // Shown on the demo page so visitors understand what they are querying.
   corpus: {

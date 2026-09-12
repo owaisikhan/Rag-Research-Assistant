@@ -1,11 +1,11 @@
-# Cited — a document-grounded research assistant
+# Folio
 
-Ask a library of PDFs a question in plain English. Get an answer built only
-from passages retrieved out of those documents, with every claim numbered and
-linked back to the page it came from.
+Upload a PDF and ask questions about it. Every answer is built only from
+passages retrieved out of your own document — if the document does not cover
+the question, it says so rather than filling the gap from general knowledge.
 
-Point it at research papers, contracts, policy manuals, standards or reports —
-it is not tuned to one subject.
+Uploads are private to whoever made them, enforced in the database rather than
+the application, and deleted after 24 hours.
 
 ---
 
@@ -23,9 +23,15 @@ because cosine distance and `ts_rank` are not on comparable scales, so any
 fixed weighting between them is a magic number that stops being right as soon
 as the corpus changes. Ranks are always comparable.
 
-**Citation metadata lives on the chunk, not the document.** An answer cites a
-passage on a page, not a file. `page_start`, `page_end` and `section` are
-carried from PDF extraction all the way to the chip you click in the UI.
+**Citation metadata lives on the chunk, not the document.** A passage belongs
+to a page, not to a file. `page_start`, `page_end` and `section` are carried
+from PDF extraction all the way through retrieval.
+
+Page-level citations — numbered markers in the answer, a sources panel, click a
+marker to see the passage it came from — are built and working, but currently
+**switched off** (`NEXT_PUBLIC_SHOW_CITATIONS=false`). One env var brings them
+back. The grounding rules are unaffected either way: the model answers only
+from retrieved passages in both modes.
 
 **"The sources do not say" is a correct answer.** The system prompt makes
 refusing an explicitly correct outcome rather than a failure, which is the
