@@ -73,7 +73,19 @@ Do not describe your own process. No "based on the provided sources" or "the ret
  * Sources come first so that the question is the last thing read, which
  * measurably improves how well the answer stays on the question asked.
  */
-export function buildUserTurn(question, sources, { numbered = true } = {}) {
+/**
+ * A one-line restatement of the trailer rule, placed LAST.
+ *
+ * The rule is already in the system prompt, but an instruction competing with
+ * a long analytical answer is better obeyed when it is the last thing read.
+ * Observed: short factual answers carried the trailer reliably while a longer
+ * one dropped it, and the whole document-marking feature degrades silently
+ * when it is missing.
+ */
+const TRAILER_REMINDER =
+  "\n\nRemember: end with the [[used: ...]] line naming only the passages you relied on.";
+
+export function buildUserTurn(question, sources, { numbered = true, remindTrailer = false } = {}) {
   if (sources.length === 0) {
     return `No passages were retrieved for this question.
 
@@ -88,7 +100,7 @@ ${renderContext(sources, { numbered })}
 
 ---
 
-Question: ${question}`;
+Question: ${question}${remindTrailer ? TRAILER_REMINDER : ""}`;
 }
 
 /**

@@ -125,7 +125,9 @@ export async function* streamAnswer({ question, sources, history }) {
     ...history.map((turn) => ({ role: turn.role, content: turn.content })),
     {
       role: "user",
-      content: buildUserTurn(question, sources),
+      // The trailer is only asked for when inline markers are off; with them
+      // on, the [n] markers already record which passages were used.
+      content: buildUserTurn(question, sources, { remindTrailer: !withCitations }),
     },
   ];
 

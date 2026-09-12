@@ -34,10 +34,19 @@ export const maxDuration = 300;
 
 // What the deployment can genuinely spend on one upload.
 //
-// Defaults to the pessimistic 60, so a project without fluid compute is
-// correct out of the box. Raise it to 300 once you have confirmed fluid
-// compute is enabled (Project Settings -> Functions).
-const TIME_BUDGET_S = Number(process.env.UPLOAD_TIME_BUDGET_S || 60);
+// 300, matching maxDuration above, because THIS project runs on fluid compute
+// and that is verified. It defaulted to the pessimistic 60 to be safe for a
+// legacy project without it, which was the wrong trade: it made the app refuse
+// documents it could comfortably index, with a message blaming "this
+// deployment" for a limit the deployment did not have. A default that
+// contradicts the project it ships in is a trap, not a safety net.
+//
+// A project WITHOUT fluid compute must set UPLOAD_TIME_BUDGET_S=60, or uploads
+// will be accepted and then killed at the platform's timeout. That failure is
+// survivable -- the `pending:` sentinel means a killed upload leaves a row
+// that can never be mistaken for complete, and it is purged after ten minutes
+// -- but it is a worse experience than an immediate refusal.
+const TIME_BUDGET_S = Number(process.env.UPLOAD_TIME_BUDGET_S || 300);
 
 // Embedding requests per minute the provider allows. Gemini's free tier is
 // 100; a paid tier is far higher, so raising this is the other half of

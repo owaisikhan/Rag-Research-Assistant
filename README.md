@@ -181,7 +181,8 @@ tables, which is a good way to size an upload limit confidently against the
 wrong one.
 
 So the page cap is only a coarse ceiling. The real gate is `UPLOAD_TIME_BUDGET_S`
-(default 60, raise to 300 once you have confirmed fluid compute), checked at
+(default 300, matching this project's fluid compute; set it to 60 on a project
+without it), checked at
 runtime against the work the document actually requires. Extraction and
 chunking are local and free, so by then the exact chunk count is known --
 and pages are a poor proxy for it, ranging from 1.5 to 4.25 chunks per page
