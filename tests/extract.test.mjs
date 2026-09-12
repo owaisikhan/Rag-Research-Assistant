@@ -6,7 +6,7 @@ import { writeFile, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { chunkPages } from "../scripts/lib/chunk.mjs";
+import { chunkPages } from "../app/_lib/rag/chunk.js";
 
 // Rebuilt here rather than written literally, so this file stays free of the
 // control characters it is testing for.

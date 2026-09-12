@@ -103,6 +103,24 @@ function renderCitations(text, { byNumber, onCite, activeNumber, keyPrefix }) {
  * the supported subset is small and closed, and a parser would be more code
  * defending against markdown this never receives.
  */
+/**
+ * Strip TeX math delimiters, keeping what is between them.
+ *
+ * The prompt asks for plain prose, but a model reading a mathematics paper
+ * will sometimes mirror its notation anyway. Rendering "$\\sqrt{d_k}$"
+ * verbatim looks like the page is broken, and a reader cannot tell whether the
+ * document or the app is at fault. Unwrapping at least leaves something
+ * readable. Full math rendering is a larger job than this demo needs.
+ */
+function stripMathDelimiters(text) {
+  return text
+    .replace(/\$\$([^$]+)\$\$/g, "$1")
+    .replace(/\$([^$\n]+)\$/g, "$1")
+    .replace(/\\(?:text|mathrm|mathbf)\{([^}]*)\}/g, "$1")
+    .replace(/\\sqrt\{([^}]*)\}/g, "the square root of $1")
+    .replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, "$1/$2");
+}
+
 function toBlocks(text) {
   const blocks = [];
   let list = null;
@@ -112,7 +130,7 @@ function toBlocks(text) {
     list = null;
   };
 
-  for (const rawLine of text.split("\n")) {
+  for (const rawLine of stripMathDelimiters(text).split("\n")) {
     const line = rawLine.trim();
 
     if (line === "") {

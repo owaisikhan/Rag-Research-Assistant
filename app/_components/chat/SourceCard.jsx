@@ -35,7 +35,16 @@ export default function SourceCard({ source, isActive, onSelect }) {
           >
             {source.number}
           </span>
-          <span className="text-sm font-medium leading-snug text-ink">{source.title}</span>
+          <span className="text-sm font-medium leading-snug text-ink">
+            {source.title}
+            {source.isUpload && (
+              /* A word, not just a colour: which library a claim came from is
+                 the kind of thing a reader must not have to infer from a hue. */
+              <span className="ml-1.5 whitespace-nowrap rounded bg-primary-soft px-1.5 py-0.5 align-middle text-[0.6rem] font-semibold uppercase tracking-wide text-primary">
+                Your upload
+              </span>
+            )}
+          </span>
         </div>
 
         <p className="mt-1.5 pl-7 text-xs text-ink-faint">

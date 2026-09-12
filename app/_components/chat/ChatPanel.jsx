@@ -4,6 +4,7 @@ import { useRef, useState, useEffect } from "react";
 
 import AnswerText from "./AnswerText";
 import SourceCard from "./SourceCard";
+import UploadPanel from "./UploadPanel";
 import Spinner from "../ui/Spinner";
 import Callout from "../ui/Callout";
 
@@ -60,6 +61,19 @@ export default function ChatPanel() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState(null);
   const [activeCitation, setActiveCitation] = useState(null);
+  const [documents, setDocuments] = useState([]);
+
+  // The parent owns the uploaded-document list so the suggestions can change
+  // once a visitor has their own document in play.
+  async function refreshDocuments() {
+    try {
+      const response = await fetch("/api/documents");
+      const body = await response.json();
+      setDocuments(body.documents ?? []);
+    } catch {
+      // A failed listing is not worth interrupting the conversation for.
+    }
+  }
 
   const endRef = useRef(null);
   const inputRef = useRef(null);
@@ -142,12 +156,19 @@ export default function ChatPanel() {
           {messages.length === 0 && (
             <div className="rounded-xl border border-border bg-surface-raised p-5">
               <p className="text-sm text-ink-muted">
-                Ask anything about the library. Every answer is built only from
-                passages retrieved out of the documents, and every claim is
-                numbered so you can check it.
+                {documents.length > 0
+                  ? "Ask about your uploaded documents or the demo library — both are searched together, and every claim is numbered so you can check it."
+                  : "Ask anything about the library. Every answer is built only from passages retrieved out of the documents, and every claim is numbered so you can check it."}
               </p>
               <ul className="mt-4 space-y-2">
-                {SUGGESTIONS.map((suggestion) => (
+                {(documents.length > 0
+                  ? [
+                      `What is ${documents[0].title} about?`,
+                      "What are the key points in my uploaded document?",
+                      "Does my document agree with the research in the library?",
+                    ]
+                  : SUGGESTIONS
+                ).map((suggestion) => (
                   <li key={suggestion}>
                     <button
                       type="button"
@@ -237,6 +258,8 @@ export default function ChatPanel() {
 
       {/* --------------------------------------------------------- sources */}
       <aside className="lg:sticky lg:top-6 lg:self-start">
+        <UploadPanel documents={documents} onChange={refreshDocuments} />
+
         <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
           Sources
           {visibleSources.length > 0 && (

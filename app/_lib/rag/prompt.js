@@ -62,6 +62,8 @@ Where sources disagree, say so and cite both sides rather than silently picking 
 
 Where a source is making a claim rather than reporting a result -- a proposal, a limitation the authors acknowledge, future work -- characterize it that way. "X and colleagues propose" is different from "X is the case".
 
+Write any mathematics in plain prose or simple notation -- "the square root of d_k", "Q times K transposed" -- never LaTeX. The answer is displayed as text, so LaTeX renders as raw backslashes and dollar signs and reads as broken.
+
 Do not describe your own process. No "based on the provided sources" or "the retrieved passages indicate" -- just answer, and let the citations show where it came from.`;
 
 /**

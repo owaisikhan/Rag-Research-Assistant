@@ -130,6 +130,43 @@ npm run dev                    # http://localhost:3000
 
 ---
 
+## Uploading a PDF from the browser
+
+A visitor can drop a PDF onto the page and immediately ask questions about it.
+It runs the same extract -> clean -> chunk -> embed pipeline as the ingestion
+script, against the same code, so an uploaded document produces citations
+identical in shape to the curated corpus: title, section, page.
+
+**Uploads are private to the visitor who made them, and that is enforced in
+the database rather than the application.** This distinction is the whole
+design:
+
+The anon key is public by design -- it ships to every browser. So "filter by
+session in the app" is not isolation: anyone can take that key and query
+`/rest/v1/documents` directly for every row, including other people's uploaded
+files. A contract, a medical letter, a draft nobody meant to share.
+
+So RLS exposes only the demo corpus (`session_id is null`) to direct table
+reads, and everything session-scoped goes through `SECURITY DEFINER` functions
+that take the session id and apply the filter themselves. The session id lives
+in an httpOnly cookie: unguessable, and unreadable by scripts on the page. The
+deployed app never holds the service-role key, so it has no credential capable
+of reaching another visitor's documents or of writing to the demo corpus.
+
+Verified rather than assumed -- a planted "other visitor's upload" is
+invisible to a direct table read, to a read with no session, and to a read
+with a *different* session, while remaining visible to its own.
+
+| Limit | Value | Why |
+|---|---|---|
+| File size | 10 MB | |
+| Pages | 60 | Every page is embeddings against a metered quota |
+| Documents per visitor | 3 | |
+| Lifetime | 24 hours | Purged opportunistically; no scheduled job needed |
+
+Change them in one place: the `upload_limits()` function in
+`supabase/migrations/006_uploads.sql`.
+
 ## Adding your own documents
 
 Drop PDFs into `corpus/` and run `npm run corpus:ingest`. Anything already

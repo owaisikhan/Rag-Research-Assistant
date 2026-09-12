@@ -16,6 +16,7 @@
 import { retrieve } from "@/app/_lib/rag/retrieve";
 import { streamAnswer, rewriteQuery } from "@/app/_lib/rag/answer";
 import { checkRateLimit, validateChatRequest } from "@/app/_lib/rag/limits";
+import { ensureSessionId } from "@/app/_lib/session";
 
 // Node runtime: the embedding and Anthropic SDKs and node:crypto all want it.
 export const runtime = "nodejs";
@@ -63,12 +64,17 @@ export async function POST(request) {
 
   const { question, history } = validated;
 
+  // Created here rather than on the home page, because a Server Component
+  // cannot set cookies. A visitor who has never uploaded simply searches the
+  // demo corpus.
+  const sessionId = await ensureSessionId();
+
   let sources;
   try {
     // A follow-up ("what about the second one?") is meaningless to a search
     // index, so it is rewritten against the conversation before retrieval.
     const searchQuery = await rewriteQuery(question, history);
-    sources = await retrieve(searchQuery);
+    sources = await retrieve(searchQuery, { sessionId });
   } catch (error) {
     console.error("Retrieval failed:", error);
     return errorResponse("Could not search the library. Please try again.", 502);
@@ -92,6 +98,7 @@ export async function POST(request) {
               pageEnd: source.pageEnd,
               sourceUrl: source.sourceUrl,
               kind: source.kind,
+              isUpload: source.isUpload,
               excerpt: source.content.slice(0, 320),
             })),
           })

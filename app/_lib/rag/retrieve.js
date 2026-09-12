@@ -21,6 +21,7 @@ const MATCH_COUNT = 12;
  * @property {string[]} authors
  * @property {string|null} sourceUrl
  * @property {string} kind
+ * @property {boolean} isUpload
  * @property {number} score
  */
 
@@ -35,7 +36,7 @@ const MATCH_COUNT = 12;
  * @param {{ matchCount?: number }} [options]
  * @returns {Promise<Source[]>}
  */
-export async function retrieve(question, { matchCount = MATCH_COUNT } = {}) {
+export async function retrieve(question, { matchCount = MATCH_COUNT, sessionId = null } = {}) {
   const trimmed = question.trim();
   if (trimmed === "") return [];
 
@@ -44,10 +45,15 @@ export async function retrieve(question, { matchCount = MATCH_COUNT } = {}) {
     createClient(),
   ]);
 
+  // The session id decides whether this visitor's own uploads are searchable
+  // alongside the demo corpus. It is enforced inside match_chunks, not here --
+  // the anon key is public, so application-side filtering would not be
+  // isolation.
   const { data, error } = await supabase.rpc("match_chunks", {
     query_embedding: embedding,
     query_text: trimmed,
     match_count: matchCount,
+    p_session: sessionId,
   });
 
   if (error) {
@@ -65,6 +71,7 @@ export async function retrieve(question, { matchCount = MATCH_COUNT } = {}) {
     authors: row.authors ?? [],
     sourceUrl: row.source_url,
     kind: row.kind,
+    isUpload: row.is_upload ?? false,
     score: row.score,
   }));
 }

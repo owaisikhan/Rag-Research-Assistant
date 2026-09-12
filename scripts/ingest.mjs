@@ -15,7 +15,7 @@ import { createHash } from "node:crypto";
 import pLimit from "p-limit";
 
 import { extractPdf } from "./lib/extract.mjs";
-import { chunkPages } from "./lib/chunk.mjs";
+import { chunkPages } from "../app/_lib/rag/chunk.js";
 import { loadEnv } from "./lib/env.mjs";
 
 loadEnv();

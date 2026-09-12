@@ -8,7 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { chunkPages, estimateTokens } from "../scripts/lib/chunk.mjs";
+import { chunkPages, estimateTokens } from "../app/_lib/rag/chunk.js";
 
 const paragraph = (words) => Array.from({ length: words }, (_, i) => `word${i}`).join(" ");
 
