@@ -12,6 +12,7 @@ import {
 } from "./prompt.js";
 import { siteConfig } from "../siteConfig.js";
 import { streamGemini } from "./providers/gemini-chat.js";
+import { recordUsage } from "./usage.js";
 
 // Which model writes the answer.
 //
@@ -78,6 +79,11 @@ export async function rewriteQuery(question, history) {
         system: QUERY_REWRITE_SYSTEM,
         messages: [{ role: "user", content: prompt }],
         maxTokens: 256,
+        // Counted too. It is a second generation request against the same
+        // daily quota, and leaving it out would make a multi-turn conversation
+        // appear to cost half what it does.
+        onUsage: ({ tokensIn, tokensOut }) =>
+          recordUsage({ kind: "generation", units: 1, tokensIn, tokensOut }),
       })) {
         text += delta;
       }
@@ -172,7 +178,17 @@ export async function* streamSummary({ outline }) {
  */
 async function* streamChat({ system, messages, maxTokens = MAX_TOKENS }) {
   if (isGeminiAnswer) {
-    yield* streamGemini({ model: MODEL, system, messages, maxTokens });
+    yield* streamGemini({
+      model: MODEL,
+      system,
+      messages,
+      maxTokens,
+      // One generation request, whatever its size. Gemini's daily generation
+      // quota counts requests, not tokens; the tokens are recorded alongside
+      // because they are what a paid tier bills on.
+      onUsage: ({ tokensIn, tokensOut }) =>
+        recordUsage({ kind: "generation", units: 1, tokensIn, tokensOut }),
+    });
     return;
   }
 

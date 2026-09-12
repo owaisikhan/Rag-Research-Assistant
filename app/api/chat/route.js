@@ -14,6 +14,7 @@
 // somewhere to point by the time it appears in the text.
 
 import { retrieve } from "@/app/_lib/rag/retrieve";
+import { recordUsage } from "@/app/_lib/rag/usage";
 import { streamAnswer, rewriteQuery } from "@/app/_lib/rag/answer";
 import { checkRateLimit, refundRateLimit, validateChatRequest } from "@/app/_lib/rag/limits";
 import { ensureSessionId, readSessionId } from "@/app/_lib/session";
@@ -124,6 +125,10 @@ export async function POST(request) {
     // index, so it is rewritten against the conversation before retrieval.
     const searchQuery = await rewriteQuery(question, history);
     sources = await retrieve(searchQuery, { sessionId });
+
+    // One text embedded, so one request against the daily embedding quota --
+    // the unit Gemini actually counts.
+    await recordUsage({ kind: "embedding", units: 1 });
   } catch (error) {
     console.error("Retrieval failed:", error);
 

@@ -7,6 +7,7 @@ import AnswerSources from "./AnswerSources";
 import UploadPanel from "./UploadPanel";
 import Composer from "./Composer";
 import OptionsMenu from "./OptionsMenu";
+import UsagePanel from "./UsagePanel";
 import ThemeToggle from "../shell/ThemeToggle";
 import Icon from "../ui/Icon";
 import { parseUsed, stripUsed } from "@/app/_lib/rag/used-trailer";
@@ -88,6 +89,8 @@ export default function ChatPanel() {
   const [activeCitation, setActiveCitation] = useState(null);
   const [documents, setDocuments] = useState([]);
   const [pendingFile, setPendingFile] = useState(null);
+  // Bumped whenever something has spent quota, so the panel re-reads.
+  const [usageKey, setUsageKey] = useState(0);
 
   const endRef = useRef(null);
   const inputRef = useRef(null);
@@ -97,6 +100,7 @@ export default function ChatPanel() {
       const response = await fetch("/api/documents");
       const body = await response.json();
       setDocuments(body.documents ?? []);
+      setUsageKey((n) => n + 1);
     } catch {
       // A failed listing is not worth interrupting the conversation for.
     }
@@ -173,6 +177,7 @@ export default function ChatPanel() {
       failTurn("The connection dropped. Please try again.");
     } finally {
       setIsStreaming(false);
+      setUsageKey((n) => n + 1);
       inputRef.current?.focus();
     }
   }
@@ -297,7 +302,10 @@ export default function ChatPanel() {
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col">
         {header}
         <div className="flex flex-1 items-center justify-center py-8">
-          <div className="w-full">{uploads}</div>
+          <div className="w-full">
+            {uploads}
+            <UsagePanel refreshKey={usageKey} />
+          </div>
         </div>
       </div>
     );
@@ -310,7 +318,10 @@ export default function ChatPanel() {
       <div className="grid gap-10 lg:grid-cols-[19rem_minmax(0,1fr)] xl:gap-14">
         {/* Documents on the left, so the thing being asked about sits beside
             the asking rather than under it. */}
-        <aside className="lg:sticky lg:top-6 lg:self-start">{uploads}</aside>
+        <aside className="lg:sticky lg:top-6 lg:self-start">
+          {uploads}
+          <UsagePanel refreshKey={usageKey} />
+        </aside>
 
         <div className="flex min-w-0 flex-col">
           <div className="flex-1 space-y-7">

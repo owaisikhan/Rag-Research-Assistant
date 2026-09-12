@@ -407,6 +407,40 @@ like a question" heuristic would be worse than nothing, because "rent?" and
 takes the normal path, so the failure mode is a greeting that gets searched —
 today's behaviour, and harmless.
 
+## Seeing what the API has cost
+
+Gemini has no "how much is left" endpoint. The only signal the free tier gives
+is a 429 once the allowance is already gone, which is how this project kept
+discovering its daily cap: a feature stopped working mid-test and the cause was
+invisible until someone read a server log.
+
+So the app counts on the way out. Every embedding and every generation is
+recorded in `api_usage`, and the left column has an **API usage today** panel
+reading from `/api/usage`.
+
+Two things it makes visible that a network trace does not:
+
+- **Each TEXT is one embedding request, not each HTTP call.** A 46-passage
+  upload is one request in a trace and 46 against the daily 1,000. That single
+  fact explains most of "why did my quota vanish".
+- **Embedding and generation are separate quotas with separate allowances**, so
+  the two rows are never summed. Confusing them for each other is the specific
+  mistake the panel exists to prevent — including the follow-up query rewrite,
+  which is a second generation call that was previously invisible and made a
+  multi-turn conversation look half as expensive as it is.
+
+Token counts come from the response's own `usageMetadata`, which was being
+parsed and discarded. `thoughtsTokenCount` is added to the output figure: it is
+billed and is *not* included in `candidatesTokenCount`, so leaving it out
+under-reports a thinking model badly.
+
+It is a **ledger, not a quota check**. Google's count stays authoritative and
+this one drifts from it — a request that fails after the provider counted it,
+the same key used from the CLI ingest script, and Google resetting on Pacific
+time while this rolls over at UTC midnight. It is for seeing the shape of
+consumption, not for gating on. Set `GEMINI_GEN_DAILY_LIMIT` to show the
+answers row against a denominator too.
+
 ## Rate limiting
 
 Twelve questions per hour per caller, counted in Postgres rather than in

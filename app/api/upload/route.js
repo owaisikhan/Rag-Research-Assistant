@@ -15,6 +15,7 @@ import { embedDocuments, EMBEDDING_MODEL } from "@/app/_lib/rag/embed";
 import { createClient } from "@/app/_lib/supabase-server";
 import { ensureSessionId } from "@/app/_lib/session";
 import { checkRateLimit, refundRateLimit } from "@/app/_lib/rag/limits";
+import { recordUsage } from "@/app/_lib/rag/usage";
 
 export const runtime = "nodejs";
 
@@ -203,6 +204,12 @@ export async function POST(request) {
 
   try {
     const embeddings = await embedDocuments(chunks.map((chunk) => chunk.content));
+
+    // EACH TEXT is one request against the daily quota, not each HTTP call --
+    // which is why a 100-page upload can cost 200+ of the free tier's 1000
+    // while looking like a handful of network requests in a trace. Recorded
+    // after the call, so a failure part-way does not log work never done.
+    await recordUsage({ kind: "embedding", units: chunks.length });
 
     if (embeddings.length !== chunks.length) {
       throw new Error("The embedding service returned the wrong number of vectors.");

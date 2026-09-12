@@ -39,7 +39,7 @@ function toGeminiContents(messages) {
  */
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export async function* streamGemini({ model, system, messages, maxTokens }) {
+export async function* streamGemini({ model, system, messages, maxTokens, onUsage }) {
   const body = JSON.stringify({
     // The system prompt is a separate field, not a message with a role.
     systemInstruction: { parts: [{ text: system }] },
@@ -106,6 +106,7 @@ export async function* streamGemini({ model, system, messages, maxTokens }) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let usage = null;
 
   for (;;) {
     const { done, value } = await reader.read();
@@ -144,6 +145,12 @@ export async function* streamGemini({ model, system, messages, maxTokens }) {
         const text = candidate?.content?.parts?.map((part) => part.text ?? "").join("");
         if (text) yield text;
 
+        // The response carries its own token counts, and they were being
+        // thrown away. They arrive on the LAST payload of the stream and are
+        // cumulative, so the latest one seen is the total for the call --
+        // summing them would multiply the count by the number of chunks.
+        if (parsed.usageMetadata) usage = parsed.usageMetadata;
+
         // A truncated answer is worse than a short one, because it reads as
         // complete until the last line. Say so rather than let it pass.
         if (candidate?.finishReason === "MAX_TOKENS") {
@@ -155,4 +162,13 @@ export async function* streamGemini({ model, system, messages, maxTokens }) {
       }
     }
   }
+
+  // Reported after the stream, not during: the counts are only complete at the
+  // end, and a caller that recorded mid-stream would log a partial call.
+  onUsage?.({
+    tokensIn: usage?.promptTokenCount ?? 0,
+    // thoughtsTokenCount is billed and is NOT included in candidatesTokenCount,
+    // so leaving it out under-reports a thinking model by a wide margin.
+    tokensOut: (usage?.candidatesTokenCount ?? 0) + (usage?.thoughtsTokenCount ?? 0),
+  });
 }
