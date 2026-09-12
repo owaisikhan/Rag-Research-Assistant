@@ -304,16 +304,16 @@ export default function ChatPanel() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
+    <div className="w-full">
       {header}
 
-      <div className="grid gap-8 lg:grid-cols-[17rem_minmax(0,1fr)]">
+      <div className="grid gap-10 lg:grid-cols-[19rem_minmax(0,1fr)] xl:gap-14">
         {/* Documents on the left, so the thing being asked about sits beside
             the asking rather than under it. */}
         <aside className="lg:sticky lg:top-6 lg:self-start">{uploads}</aside>
 
         <div className="flex min-w-0 flex-col">
-          <div className="flex-1 space-y-5">
+          <div className="flex-1 space-y-7">
             {isEmpty && (
               <p className="text-sm text-ink-muted">
                 Ask anything about your{" "}

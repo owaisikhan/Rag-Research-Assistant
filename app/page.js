@@ -28,7 +28,7 @@ export default async function HomePage() {
       {/* min-h-dvh + flex-1 pins the footer to the bottom of the viewport on a
           short page, so an empty state does not leave the rule and the footer
           floating halfway up with nothing under them. */}
-      <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 py-10 sm:px-6">
+      <div className="mx-auto flex min-h-dvh w-full max-w-[88rem] flex-col px-4 py-10 sm:px-8 lg:px-12">
         <main className="flex min-w-0 flex-1 flex-col">
           {!isConfigured ? (
             <Callout tone="danger">
@@ -50,7 +50,7 @@ export default async function HomePage() {
 
         {/* A sibling of <main>, not a child of it -- flex-1 on main can only
             push down what sits beside it. */}
-        <footer className="mx-auto mt-12 w-full max-w-3xl border-t border-border pt-5 text-xs text-ink-faint">
+        <footer className="mt-12 w-full border-t border-border pt-5 text-xs text-ink-faint">
           <p>
             {siteConfig.mode.showCitations
               ? "Answers are generated from retrieved passages only. Citations link to the page they came from — check them."

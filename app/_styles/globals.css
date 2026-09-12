@@ -120,18 +120,23 @@
   /* The answer body. Slightly larger and looser than UI text, because it is
      read as prose rather than scanned. */
   .answer-prose {
-    font-size: 0.9375rem;
-    line-height: 1.7;
+    font-size: 1rem;
+    line-height: 1.8;
+    /* A measure cap, not a width. The column is wide now, but a line of prose
+       past roughly 80 characters is measurably harder to read -- the eye loses
+       its place returning to the next line. So the layout uses the width and
+       the text does not. */
+    max-width: 78ch;
   }
 
   .answer-prose p + p {
-    margin-top: 0.85rem;
+    margin-top: 1.1rem;
   }
 
   .answer-prose ul,
   .answer-prose ol {
-    margin-top: 0.6rem;
-    padding-left: 1.25rem;
+    margin-top: 0.75rem;
+    padding-left: 1.35rem;
     list-style: disc;
   }
 
@@ -140,7 +145,7 @@
   }
 
   .answer-prose li + li {
-    margin-top: 0.3rem;
+    margin-top: 0.45rem;
   }
 }
 

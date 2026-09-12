@@ -201,8 +201,36 @@ limit rather than the daily one: 100 requests/minute means a 100-page document
 takes about two minutes of wall time. Enabling billing removes that pacing, at
 roughly four cents per 100-page document.
 
-Change them in one place: the `upload_limits()` function in
-`supabase/migrations/006_uploads.sql`.
+### What 300 seconds actually buys
+
+Confirming fluid compute and setting `UPLOAD_TIME_BUDGET_S=300` does not lift
+the ceiling as far as it looks, because the binding constraint is not the
+function's duration — it is the embedding provider's per-minute rate.
+
+At 95 embeddings/minute and `EMBED_SHARE` of the budget:
+
+| Budget | Embedding window | Passages | ≈ pages at 2.19/page |
+|---|---|---|---|
+| 60s | 40s | 63 | ~29 |
+| 300s | 198s | 313 | ~143 |
+
+A sparse document goes much further (0.96 chunks/page here, so ~326 pages); a
+dense one much less (4.25 chunks/page, so ~74). That spread is why the gate is
+measured after chunking rather than declared as a page count.
+
+**A 450-page document does not fit on the free tier, and no amount of budget
+fixes it.** At the corpus average it is ~985 passages: about 10 minutes of
+embedding at 95/minute, and ~985 of the free tier's 1,000 embeddings **per
+day** — one document would consume the entire daily allowance. The two ways
+through are enabling billing on the embedding provider (which lifts both the
+per-minute pacing and the daily cap) or splitting the document.
+
+`max_pages` is deliberately a coarse ceiling well above anything the measured
+check will pass, so a refusal always comes from the measurement and carries a
+sentence saying what would fit.
+
+Change the limits in one place: the `upload_limits()` function, most recently
+in `supabase/migrations/011_raise_page_ceiling.sql`.
 
 ## Summarising a document
 
