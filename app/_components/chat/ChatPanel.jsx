@@ -9,6 +9,7 @@ import Composer from "./Composer";
 import OptionsMenu from "./OptionsMenu";
 import ThemeToggle from "../shell/ThemeToggle";
 import Icon from "../ui/Icon";
+import { parseUsed, stripUsed } from "@/app/_lib/rag/used-trailer";
 import { useToast } from "../ui/Toaster";
 import { siteConfig } from "@/app/_lib/siteConfig";
 import Spinner from "../ui/Spinner";
@@ -19,6 +20,24 @@ const STARTERS = [
   "What are the key points?",
   "Anything here I should be careful about?",
 ];
+
+/**
+ * The document ids a finished answer named, or null if it named none.
+ */
+function documentsUsedBy(message) {
+  if (!message || message.content === "") return null;
+
+  const used = parseUsed(message.content);
+  if (used === null) return null;
+
+  const byNumber = new Map((message.sources ?? []).map((source) => [source.number, source]));
+
+  return new Set(
+    used
+      .map((number) => byNumber.get(number)?.documentId)
+      .filter(Boolean)
+  );
+}
 
 /**
  * Read the NDJSON stream from /api/chat and /api/summarize.
@@ -223,21 +242,33 @@ export default function ChatPanel() {
   const hasDocuments = documents.length > 0;
   const isEmpty = messages.length === 0;
 
-  // Which documents the newest answer actually drew on. Passed to the document
-  // list so the reader can see, at a glance, which of several uploads the
-  // answer came out of -- the question "but which one said that?" is the first
-  // one anybody asks once there is more than one document in play.
-  const usedDocumentIds = new Set(
-    (lastAssistant?.sources ?? []).map((source) => source.documentId).filter(Boolean)
-  );
+  // Which documents the newest answer actually drew on -- the question "but
+  // which one said that?" is the first anybody asks once more than one
+  // document is in play.
+  //
+  // From what the MODEL said it used, not from what retrieval returned. Those
+  // differ constantly: ask what one customer owes and a second customer's
+  // near-identical statement is fetched too, ignored, and would otherwise be
+  // credited under the answer. null means the model did not say, and nothing
+  // is marked -- an unknown must not be dressed up as an answer.
+  const usedDocumentIds = documentsUsedBy(lastAssistant);
 
   const header = (
     <header className="mb-8 flex items-start justify-between gap-4">
+      {/* The wordmark. Serif, against a sans interface: the contrast is what
+          makes it read as a NAME rather than as the page's first heading. A
+          folio is a leaf of a book, so the reference is to type rather than to
+          software, which is also the point of the whole palette. */}
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">
-          {siteConfig.name}
-        </h1>
-        <p className="mt-1 text-sm text-ink-muted">{siteConfig.tagline}</p>
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-on-primary">
+            <Icon name="book" className="h-[1.15rem] w-[1.15rem]" strokeWidth={1.9} />
+          </span>
+          <h1 className="font-serif text-[2rem] font-semibold leading-none tracking-[-0.02em] text-ink">
+            {siteConfig.name}
+          </h1>
+        </div>
+        <p className="mt-2.5 text-sm text-ink-muted">{siteConfig.tagline}</p>
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
@@ -307,7 +338,7 @@ export default function ChatPanel() {
                   ) : (
                     <>
                       <AnswerText
-                        text={message.content}
+                        text={stripUsed(message.content)}
                         sources={message.sources ?? []}
                         onCite={setActiveCitation}
                         activeNumber={activeCitation}
@@ -326,12 +357,15 @@ export default function ChatPanel() {
 
                       {message.content !== "" && (
                         <>
-                          <AnswerSources sources={message.sources} />
+                          <AnswerSources
+                            sources={message.sources}
+                            used={parseUsed(message.content)}
+                          />
 
                           <div className="mt-2 flex gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
                             <button
                               type="button"
-                              onClick={() => copyAnswer(message.content)}
+                              onClick={() => copyAnswer(stripUsed(message.content))}
                               className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-ink-faint transition-colors hover:bg-primary-soft hover:text-primary"
                             >
                               <Icon name="copy" className="h-3.5 w-3.5" />

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import Icon from "../ui/Icon";
+import { stripUsed } from "@/app/_lib/rag/used-trailer";
 import { useToast } from "../ui/Toaster";
 
 /**
@@ -64,7 +65,7 @@ export default function OptionsMenu({ messages, onClear }) {
     }
 
     const body = messages
-      .map((message) => `## ${message.role === "user" ? "You" : "Folio"}\n\n${message.content}`)
+      .map((message) => `## ${message.role === "user" ? "You" : "Folio"}\n\n${stripUsed(message.content)}`)
       .join("\n\n");
 
     const file = new Blob([`# Folio conversation\n\n${body}\n`], {

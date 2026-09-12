@@ -52,17 +52,42 @@ function groupByDocument(sources) {
   return [...groups.values()];
 }
 
-export default function AnswerSources({ sources }) {
+export default function AnswerSources({ sources, used }) {
   const [openKey, setOpenKey] = useState(null);
 
   if (!sources || sources.length === 0) return null;
 
-  const groups = groupByDocument(sources);
+  // `used` is what the model said it relied on. Three cases, and conflating
+  // any two of them is how a sources list starts lying:
+  //
+  //   an array  -> those passages, under "Based on"
+  //   []        -> it answered from none of them; say so rather than showing
+  //                a list the answer did not come from
+  //   null      -> it did not say. Show what was SEARCHED, and label it that
+  //                way. Retrieval hands over near-identical documents all the
+  //                time; crediting them as sources would be a confident lie.
+  const known = Array.isArray(used);
+
+  if (known && used.length === 0) {
+    return (
+      <p className="mt-3 text-xs text-ink-faint">
+        This answer did not come from your documents.
+      </p>
+    );
+  }
+
+  const shown = known
+    ? sources.filter((source) => used.includes(source.number))
+    : sources;
+
+  if (shown.length === 0) return null;
+
+  const groups = groupByDocument(shown);
 
   return (
     <section className="mt-3">
       <h3 className="text-[0.7rem] font-semibold uppercase tracking-wide text-ink-faint">
-        Based on
+        {known ? "Based on" : "Passages searched"}
       </h3>
 
       <ul className="mt-1.5 space-y-1">

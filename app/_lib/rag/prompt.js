@@ -25,13 +25,11 @@ export function renderContext(sources, { numbered = true } = {}) {
       const where = source.section ? `${source.section}, ${pages}` : pages;
       const who = source.authors.length > 0 ? ` -- ${source.authors.slice(0, 3).join(", ")}${source.authors.length > 3 ? " et al." : ""}` : "";
 
-      // Without numbers the model has nothing to cite with, which is the
-      // point -- but it still needs to know which document a passage is from,
-      // so it can say "the lease agreement says" rather than blurring two
-      // documents together.
-      const heading = numbered
-        ? `[${index + 1}] ${source.title}${who}`
-        : `From: ${source.title}${who}`;
+      // Always numbered, in both modes. Even with inline markers switched
+      // off, the model needs a handle for each passage so it can name the ones
+      // it used in the trailer -- and it still needs the title, so it can say
+      // "the lease says" rather than blurring two documents together.
+      const heading = `[${index + 1}] ${source.title}${who}`;
 
       return [heading, `    (${where})`, "", source.content].join("\n");
     })
@@ -114,7 +112,7 @@ If the passages do not answer the question, say so plainly and say what they DO 
 
 Answer the question that was asked, directly, in the first sentence where possible. Then support it.
 
-Do NOT use bracketed reference numbers such as [1] or [2]. Where it genuinely helps the reader find something, name the place in prose instead -- "in the section on termination", "on page 4".
+Do NOT use bracketed reference numbers such as [1] or [2] inside your prose. Where it genuinely helps the reader find something, name the place in words instead -- "in the section on termination", "on page 4".
 
 Use plain prose. Reach for a short list only when the content is genuinely a list. Keep it proportionate: a factual question deserves a short answer, not an essay assembled from every passage you were handed.
 
@@ -122,7 +120,19 @@ Write any mathematics in plain prose or simple notation, never LaTeX.
 
 Where the document is making a claim rather than reporting a result -- a proposal, a limitation acknowledged, future work -- characterize it that way.
 
-Do not describe your own process. No "based on the provided passages" -- just answer.`;
+Do not describe your own process. No "based on the provided passages" -- just answer.
+
+## The last line
+
+After your answer, on its own final line, write exactly:
+
+[[used: 3, 7]]
+
+listing the numbers of the passages you ACTUALLY relied on -- not every passage you were given. You will often be handed passages from documents that turn out to be irrelevant: near-identical documents about different people, different dates, different contracts. Leave those out.
+
+This line is stripped before the reader sees it. It is what tells them which of their documents the answer came from, so it must be honest: listing a passage you did not use credits the wrong document, and a reader checking that document will not find the claim there.
+
+If you could not answer from the passages at all, write [[used: ]] with nothing in it.`;
 
 /**
  * Rewrite a follow-up into a standalone search query.

@@ -296,6 +296,32 @@ What is left is what works:
 Under every answer is a **Based on** list: the documents it drew on, with the
 pages, collapsed by default and expandable to the passages themselves.
 
+**It shows what the model USED, not what retrieval returned.** Those differ
+constantly, and the gap is not a corner case. Ask what one customer owes and a
+second customer's statement is fetched too — same layout, same vocabulary,
+near-identical embedding — then correctly ignored by the model. Listing it as a
+source credits the wrong document, and a reader who opens it will not find the
+claim there.
+
+Without inline `[1]` markers there is no record of which passages an answer
+relied on, so the model is asked for one: it ends its answer with a
+machine-readable `[[used: 1, 4]]` line naming the passages it actually used,
+which is stripped before display. The prose stays clean and the attribution is
+ground truth rather than a guess. Stripping handles a *partial* trailer too,
+since it arrives a character at a time over the stream and `[[us` would
+otherwise flash on screen.
+
+Three states, and conflating any two of them is how a source list starts lying:
+
+| The model said | Shown |
+|---|---|
+| `[[used: 1, 4]]` | those documents, under **Based on**, and marked in the list |
+| `[[used: ]]` | "This answer did not come from your documents" |
+| nothing at all | everything retrieved, labelled **Passages searched**, nothing marked |
+
+The last row matters: a missing trailer means *unknown*, not *none*, and an
+unknown must not be dressed up as an answer.
+
 It is grouped BY DOCUMENT, not listed per passage. Twelve passages out of one
 lease is not twelve sources — it is one document and a set of pages — and the
 page ranges are merged into one readable run (`pp. 3–5, 9` rather than

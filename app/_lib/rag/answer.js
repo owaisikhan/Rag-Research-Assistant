@@ -125,7 +125,7 @@ export async function* streamAnswer({ question, sources, history }) {
     ...history.map((turn) => ({ role: turn.role, content: turn.content })),
     {
       role: "user",
-      content: buildUserTurn(question, sources, { numbered: withCitations }),
+      content: buildUserTurn(question, sources),
     },
   ];
 
