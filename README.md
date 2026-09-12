@@ -160,9 +160,23 @@ with a *different* session, while remaining visible to its own.
 | Limit | Value | Why |
 |---|---|---|
 | File size | 10 MB | |
-| Pages | 60 | Every page is embeddings against a metered quota |
+| Pages | 100 | ~210 chunks, ~126s to embed at the free tier's 100/minute -- inside Vercel's 300s ceiling |
 | Documents per visitor | 3 | |
 | Lifetime | 24 hours | Purged opportunistically; no scheduled job needed |
+| Interrupted uploads | 10 minutes | Retryable rather than occupying an allowance slot all day |
+
+**On timeouts.** Vercel terminates a function that exceeds its duration; it does
+not restart or retry it, and anything already written stays written. So an
+upload writes its document row with a `pending:` sentinel hash FIRST, and
+commits the real hash only once every chunk is stored and counted. A timeout
+therefore leaves a row that can never be mistaken for a complete document --
+hidden from the visitor's list, excluded from retrieval, and purged after ten
+minutes so the next attempt starts clean.
+
+The free tier's real constraint on large uploads is the per-minute embedding
+limit rather than the daily one: 100 requests/minute means a 100-page document
+takes about two minutes of wall time. Enabling billing removes that pacing, at
+roughly four cents per 100-page document.
 
 Change them in one place: the `upload_limits()` function in
 `supabase/migrations/006_uploads.sql`.

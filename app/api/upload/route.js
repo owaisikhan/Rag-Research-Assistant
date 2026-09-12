@@ -17,10 +17,14 @@ import { ensureSessionId } from "@/app/_lib/session";
 import { checkRateLimit } from "@/app/_lib/rag/limits";
 
 export const runtime = "nodejs";
-// Embedding is the slow part and it is rate limited upstream, so the ceiling
-// is the platform's. The page cap in the database is what actually keeps a
-// request inside it.
-export const maxDuration = 60;
+// Vercel terminates a function that exceeds this -- it does not restart or
+// retry it -- so the ceiling has to cover the slowest realistic upload.
+//
+// 300s is the limit on Hobby with fluid compute (on by default); an earlier
+// value of 60 here was simply wrong and capped uploads at a fifth of what the
+// platform allows. A 100-page document is ~210 chunks, which at the free
+// tier's 100 embeddings/minute is about 126 seconds.
+export const maxDuration = 300;
 
 const MAX_BYTES = 10 * 1024 * 1024;
 // Chunks are inserted in batches for the same reason as the ingestion script:

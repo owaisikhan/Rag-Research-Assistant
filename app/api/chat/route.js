@@ -20,7 +20,9 @@ import { ensureSessionId } from "@/app/_lib/session";
 
 // Node runtime: the embedding and Anthropic SDKs and node:crypto all want it.
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// 300s is the Hobby limit with fluid compute. Answers stream long before
+// this, but a slow retrieval plus a slow first token should not be cut off.
+export const maxDuration = 300;
 
 const encoder = new TextEncoder();
 
