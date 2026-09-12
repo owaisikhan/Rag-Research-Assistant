@@ -83,11 +83,18 @@ async function main() {
 
   if (args.retrievalOnly) return;
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.log("ANTHROPIC_API_KEY is not set, so no answer was generated.");
+  // Which key is needed depends on ANSWER_MODEL, not on a hardcoded provider.
+  const answerModel = process.env.ANSWER_MODEL || "claude-opus-5";
+  const neededKey = answerModel.startsWith("gemini") ? "GEMINI_API_KEY" : "ANTHROPIC_API_KEY";
+
+  if (!process.env[neededKey]) {
+    console.log(`${neededKey} is not set, so no answer was generated.`);
+    console.log(`(ANSWER_MODEL is "${answerModel}".)`);
     console.log("The passages above are exactly what would have been sent.\n");
     return;
   }
+
+  console.log(`Answering with: ${answerModel}\n`);
 
   const { streamAnswer } = await import("../app/_lib/rag/answer.js");
 

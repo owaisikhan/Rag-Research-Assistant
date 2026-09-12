@@ -3,16 +3,26 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 
 import { SYSTEM_PROMPT, buildUserTurn, QUERY_REWRITE_SYSTEM } from "./prompt.js";
+import { streamGemini } from "./providers/gemini-chat.js";
 
-// Claude Opus 5. The job -- read a dozen passages, answer only from them, and
-// attribute every claim correctly -- rewards a model that follows negative
-// instructions ("do not use outside knowledge") reliably, which is exactly
-// where the cheaper tiers drift.
-const MODEL = "claude-opus-5";
+// Which model writes the answer.
+//
+// Claude Opus 5 is the default and the recommendation. The job -- read a dozen
+// passages, answer only from them, and attribute every claim correctly --
+// rewards a model that follows NEGATIVE instructions ("do not use outside
+// knowledge, say so if the sources do not answer") reliably, and that is
+// exactly where cheaper models drift: they answer the question well from
+// general knowledge and cite whatever looks closest.
+//
+// A Gemini model can be set instead, which lets the whole app run on a free
+// tier with no Anthropic account. Useful for development and for demonstrating
+// the pipeline; judge the pipeline by it, not the answer quality.
+const MODEL = process.env.ANSWER_MODEL || "claude-opus-5";
+const isGeminiAnswer = MODEL.startsWith("gemini");
 
 // Follow-up rewriting is a mechanical transformation, so it runs on the
-// cheapest model rather than paying Opus rates to resolve a pronoun.
-const REWRITE_MODEL = "claude-haiku-4-5";
+// cheapest available model rather than paying top rates to resolve a pronoun.
+const REWRITE_MODEL = isGeminiAnswer ? "gemini-flash-lite-latest" : "claude-haiku-4-5";
 
 // A cited answer should be a few paragraphs. 4096 leaves room for a thorough
 // answer over a dozen sources without ever truncating mid-sentence.
@@ -50,17 +60,27 @@ export async function rewriteQuery(question, history) {
     .map((turn) => `${turn.role === "user" ? "User" : "Assistant"}: ${turn.content}`)
     .join("\n");
 
+  const prompt = `Conversation so far:\n${transcript}\n\nLatest message: ${question}`;
+
   try {
+    if (isGeminiAnswer) {
+      let text = "";
+      for await (const delta of streamGemini({
+        model: REWRITE_MODEL,
+        system: QUERY_REWRITE_SYSTEM,
+        messages: [{ role: "user", content: prompt }],
+        maxTokens: 256,
+      })) {
+        text += delta;
+      }
+      return text.trim() || question;
+    }
+
     const response = await anthropic().messages.create({
       model: REWRITE_MODEL,
       max_tokens: 256,
       system: QUERY_REWRITE_SYSTEM,
-      messages: [
-        {
-          role: "user",
-          content: `Conversation so far:\n${transcript}\n\nLatest message: ${question}`,
-        },
-      ],
+      messages: [{ role: "user", content: prompt }],
     });
 
     const text = response.content
@@ -95,6 +115,16 @@ export async function* streamAnswer({ question, sources, history }) {
     ...history.map((turn) => ({ role: turn.role, content: turn.content })),
     { role: "user", content: buildUserTurn(question, sources) },
   ];
+
+  if (isGeminiAnswer) {
+    yield* streamGemini({
+      model: MODEL,
+      system: SYSTEM_PROMPT,
+      messages,
+      maxTokens: MAX_TOKENS,
+    });
+    return;
+  }
 
   const stream = anthropic().beta.messages.stream({
     model: MODEL,
