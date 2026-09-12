@@ -1,5 +1,7 @@
 import "server-only";
 
+import { DailyQuotaExhausted } from "../embed.js";
+
 // Gemini answer generation, for running the app without an Anthropic key.
 //
 // Kept in its own file rather than branching inside answer.js, because the two
@@ -60,7 +62,7 @@ export async function* streamGemini({ model, system, messages, maxTokens }) {
   // single attempt shows the user a broken app for something that clears in
   // seconds. Retried here rather than surfaced, because nothing upstream can
   // do anything useful with it.
-  const MAX_ATTEMPTS = 4;
+  const MAX_ATTEMPTS = 5;
   let response;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -76,12 +78,28 @@ export async function* streamGemini({ model, system, messages, maxTokens }) {
     if (response.ok) break;
 
     const detail = await response.text();
+
+    // Generation has its own daily allowance, separate from the embedding one.
+    // Retrying it is pointless and the generic "please try again" it produced
+    // was actively misleading -- retrieval had worked, sources were already on
+    // screen, and the only thing missing was an answer that would not arrive
+    // for hours.
+    if (response.status === 429 && /PerDay/i.test(detail)) {
+      throw new DailyQuotaExhausted(
+        "Gemini free tier: the daily allowance for generating answers is used up. " +
+          "It is a separate quota from embeddings, so search still works. " +
+          "It resets every 24 hours."
+      );
+    }
+
     const transient = response.status === 429 || response.status >= 500;
 
     if (!transient || attempt === MAX_ATTEMPTS) {
       throw new Error(`Gemini generation failed: ${response.status} ${detail.slice(0, 300)}`);
     }
 
+    // 503 "experiencing high demand" is common on the free tier and clears in
+    // seconds, so it is worth waiting out rather than failing the request.
     await sleep(1000 * 2 ** (attempt - 1));
   }
 

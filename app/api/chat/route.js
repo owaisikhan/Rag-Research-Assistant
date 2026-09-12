@@ -122,9 +122,17 @@ export async function POST(request) {
         }
       } catch (error) {
         console.error("Answer generation failed:", error);
-        controller.enqueue(
-          line({ type: "error", message: "The answer stopped early. Please try again." })
-        );
+
+        // The sources are already rendered at this point, so a bare "try
+        // again" reads as though the whole thing broke. Say which half did.
+        const message =
+          error.name === "DailyQuotaExhausted"
+            ? "The sources above were found, but this demo's daily allowance for " +
+              "writing answers is used up. It resets every 24 hours."
+            : "The answer stopped early. The sources above are still the ones " +
+              "that matched — try asking again.";
+
+        controller.enqueue(line({ type: "error", message }));
       } finally {
         controller.close();
       }
