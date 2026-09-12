@@ -204,6 +204,37 @@ roughly four cents per 100-page document.
 Change them in one place: the `upload_limits()` function in
 `supabase/migrations/006_uploads.sql`.
 
+## Summarising a document
+
+Each uploaded document has a **Summarise** button. It produces a summary of
+the whole document, not an answer assembled from whichever passages happened
+to match a question.
+
+**Summarising is not a retrieval query, and building it as one is the trap.**
+Asking the index for the chunks most similar to "summarise this document"
+returns whatever uses summary-flavoured language -- an abstract, a conclusion,
+a sentence beginning "in summary" -- and silently skips the middle of the
+document. The result reads fluently and covers half the content, which is the
+worst failure available: confident and incomplete.
+
+So `document_outline()` never touches the embedding. It cuts the document into
+equal buckets with `ntile()` and takes the first chunk of each, giving an even
+spread in reading order regardless of length. Measured on a 190-chunk paper, 16
+passages span chunk 0 to 179 and pages 1 to 76.
+
+The model is told how much it is seeing (`16 passages ... out of 190`), because
+a model told nothing writes as though it read the document end to end.
+
+Two consequences worth knowing:
+
+- **It costs no embedding quota.** There is no query to embed, so a summary is
+  pure Postgres plus one generation call — the cheapest thing the app does.
+- **Access is enforced in the function, not the route.** The caller passes a
+  document id, so without that check a visitor could summarise someone else's
+  upload by guessing a uuid. Same proof as uploads: a planted document is
+  invisible with no session and to a *different* session, visible only to its
+  owner, and a half-indexed one is invisible even to its owner.
+
 ## Adding your own documents
 
 Drop PDFs into `corpus/` and run `npm run corpus:ingest`. Anything already
@@ -280,11 +311,15 @@ app/
     rag/embed.js           embedding provider (swappable)
     rag/retrieve.js        hybrid search
     rag/prompt.js          context assembly + grounding instructions
-    rag/answer.js          streaming answer + follow-up rewriting
+    rag/answer.js          streaming answer + summary + follow-up rewriting
+    rag/summarize.js       even-coverage passage sampling for summaries
     rag/limits.js          rate limiting and request validation
     data-service.js        every read query
     siteConfig.js          identity as data
   api/chat/route.js        streaming NDJSON endpoint
+  api/summarize/route.js   whole-document summary, same wire format
+  api/upload/route.js      PDF upload and indexing
+  api/documents/route.js   list and delete this visitor's uploads
 scripts/
   fetch-corpus.mjs         build the demo library
   ingest.mjs               the ingestion pipeline

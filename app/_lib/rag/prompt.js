@@ -139,3 +139,99 @@ Resolve pronouns and references against the conversation. Keep the specific noun
 If the latest message is already standalone, return it unchanged.
 
 Return only the query text. No preamble, no quotes, no explanation.`;
+
+// ------------------------------------------------------------- summaries
+
+/**
+ * Summarising is a different job from answering, and needs different rules.
+ *
+ * The failure mode here is not hallucination but DISTORTION: given an even
+ * spread of passages from a long document, a model will happily write a
+ * confident summary of the three it found most interesting and imply it
+ * covered the whole thing. So the instructions push on proportionality and on
+ * admitting what the sample does not reach.
+ */
+const SUMMARY_SYSTEM_BASE = `You summarise a single document, using only passages taken from it.
+
+## What you are given
+
+An even spread of passages sampled across the whole document in reading order -- not the whole text. You may therefore be missing material between passages.
+
+## The rules that matter
+
+Summarise only what the passages actually contain. Never infer what a section "probably" says, never fill gaps from general knowledge about documents of this type, and never state a conclusion the passages do not support.
+
+Keep the emphasis proportionate to the document, not to how interesting a passage is. If one topic occupies most of the passages, it should occupy most of the summary.
+
+If the passages are clearly a partial view -- a long document sampled thinly, or a jump between unrelated topics -- say so in one short closing sentence. Do not pad it into a disclaimer.
+
+## How to write
+
+Open with one or two sentences saying what the document IS: its type, its subject, and what it is for. Someone who reads only that sentence should know whether they need the document.
+
+Then the substance, in plain prose. Follow the document's own shape and order rather than imposing headings of your own. Use a short list only where the content is genuinely a list -- terms, parties, obligations, numbered findings.
+
+Be proportionate to the document's length and density. A two-page letter gets a paragraph; a sixty-page report gets several. Never stretch thin material to look thorough.
+
+Name concrete specifics -- figures, dates, names, defined terms -- in preference to describing that they exist. "The tenant pays 2,500 a month" is a summary; "the document sets out payment terms" is a table of contents.
+
+Write any mathematics in plain prose or simple notation, never LaTeX.
+
+Do not describe your own process. No "the provided passages show" or "this document appears to" -- just summarise.`;
+
+const SUMMARY_CITATION_RULES = `## Citations
+
+Cite with bracketed numbers matching the passages: [1], [4]. Put each citation immediately after the claim it supports.
+
+Every sentence carrying a specific fact gets a citation. Never cite a number you were not given.`;
+
+const SUMMARY_NO_CITATION_RULES = `## References
+
+Do NOT use bracketed reference numbers such as [1]. Where it helps the reader find something, name the place in prose instead -- "in the termination clause", "on page 12".`;
+
+/**
+ * The summary system prompt, with or without the citation apparatus.
+ *
+ * Composed rather than written out twice: the grounding rules are the part
+ * that must not drift between the two modes, and two full copies is exactly
+ * how they drift.
+ */
+export function summarySystem({ numbered = true } = {}) {
+  return `${SUMMARY_SYSTEM_BASE}
+
+${numbered ? SUMMARY_CITATION_RULES : SUMMARY_NO_CITATION_RULES}`;
+}
+
+/**
+ * Build the user turn for a summary: what the document is, then the passages.
+ *
+ * The coverage line is not decoration. Told it is seeing 16 of 190 passages,
+ * the model hedges appropriately; told nothing, it writes as though it read
+ * the document end to end.
+ *
+ * @param {{title: string, authors: string[], pageCount: number|null, chunkTotal: number}} document
+ * @param {import("./retrieve.js").Source[]} passages
+ */
+export function buildSummaryTurn(document, passages, { numbered = true } = {}) {
+  const who =
+    document.authors?.length > 0
+      ? `\nAuthors: ${document.authors.slice(0, 5).join(", ")}${document.authors.length > 5 ? " et al." : ""}`
+      : "";
+
+  const pages = document.pageCount ? `\nLength: ${document.pageCount} pages` : "";
+
+  const coverage =
+    passages.length < document.chunkTotal
+      ? `\n\nThese are ${passages.length} passages sampled evenly across the document, out of ${document.chunkTotal}. You are not seeing the full text.`
+      : `\n\nThese are all ${passages.length} passages in the document, in order. You are seeing the full text.`;
+
+  return `Document: ${document.title}${who}${pages}${coverage}
+
+---
+
+${renderContext(passages, { numbered })}
+
+---
+
+Summarise this document.`;
+}

@@ -7,6 +7,8 @@ import {
   SYSTEM_PROMPT_NO_CITATIONS,
   buildUserTurn,
   QUERY_REWRITE_SYSTEM,
+  summarySystem,
+  buildSummaryTurn,
 } from "./prompt.js";
 import { siteConfig } from "../siteConfig.js";
 import { streamGemini } from "./providers/gemini-chat.js";
@@ -127,21 +129,54 @@ export async function* streamAnswer({ question, sources, history }) {
     },
   ];
 
-  const system = withCitations ? SYSTEM_PROMPT : SYSTEM_PROMPT_NO_CITATIONS;
+  yield* streamChat({
+    system: withCitations ? SYSTEM_PROMPT : SYSTEM_PROMPT_NO_CITATIONS,
+    messages,
+  });
+}
 
+/**
+ * Stream a summary of one document.
+ *
+ * Single-turn by design: a summary is of the document, not of the
+ * conversation, so the chat history is deliberately not sent. Passing it would
+ * let an earlier turn steer what the summary emphasises, which is the one
+ * thing a summary must not do.
+ *
+ * @param {object} params
+ * @param {import("./summarize.js").Outline} params.outline
+ * @returns {AsyncGenerator<string>}
+ */
+export async function* streamSummary({ outline }) {
+  const withCitations = siteConfig.mode.showCitations;
+
+  yield* streamChat({
+    system: summarySystem({ numbered: withCitations }),
+    messages: [
+      {
+        role: "user",
+        content: buildSummaryTurn(outline, outline.passages, { numbered: withCitations }),
+      },
+    ],
+  });
+}
+
+/**
+ * The provider split, in one place.
+ *
+ * Both callers need the same thing -- a system prompt, some messages, text
+ * deltas out -- and the Anthropic/Gemini branch is the kind of detail that
+ * drifts when it is written twice.
+ */
+async function* streamChat({ system, messages, maxTokens = MAX_TOKENS }) {
   if (isGeminiAnswer) {
-    yield* streamGemini({
-      model: MODEL,
-      system,
-      messages,
-      maxTokens: MAX_TOKENS,
-    });
+    yield* streamGemini({ model: MODEL, system, messages, maxTokens });
     return;
   }
 
   const stream = anthropic().beta.messages.stream({
     model: MODEL,
-    max_tokens: MAX_TOKENS,
+    max_tokens: maxTokens,
     system,
     output_config: { effort: EFFORT },
     betas: ["server-side-fallback-2026-07-01"],

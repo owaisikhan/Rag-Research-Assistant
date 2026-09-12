@@ -83,33 +83,32 @@ export default function ChatPanel() {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, isStreaming]);
 
-  async function ask(question) {
-    const trimmed = question.trim();
-    if (trimmed === "" || isStreaming) return;
+  /**
+   * Drive one assistant turn from an NDJSON endpoint.
+   *
+   * /api/chat and /api/summarize speak the same wire format, so the only
+   * things that differ are the URL, the body, and what the user's own turn
+   * says. Keeping one reader means a fix to stream handling cannot land on
+   * one path and miss the other.
+   */
+  async function run({ url, body, userText, waiting }) {
+    if (isStreaming) return;
 
     setError(null);
     setActiveCitation(null);
-    setInput("");
     setIsStreaming(true);
-
-    // Only completed turns go back as history -- the turn being written is
-    // not part of the conversation yet.
-    const history = messages.map((message) => ({
-      role: message.role,
-      content: message.content,
-    }));
 
     setMessages((current) => [
       ...current,
-      { role: "user", content: trimmed },
-      { role: "assistant", content: "", sources: [] },
+      { role: "user", content: userText },
+      { role: "assistant", content: "", sources: [], waiting },
     ]);
 
     try {
-      const response = await fetch("/api/chat", {
+      const response = await fetch(url, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ question: trimmed, history }),
+        body: JSON.stringify(body),
       });
 
       for await (const event of readNdjson(response)) {
@@ -136,6 +135,43 @@ export default function ChatPanel() {
       setIsStreaming(false);
       inputRef.current?.focus();
     }
+  }
+
+  async function ask(question) {
+    const trimmed = question.trim();
+    if (trimmed === "" || isStreaming) return;
+
+    setInput("");
+
+    // Only completed turns go back as history -- the turn being written is
+    // not part of the conversation yet.
+    const history = messages.map((message) => ({
+      role: message.role,
+      content: message.content,
+    }));
+
+    await run({
+      url: "/api/chat",
+      body: { question: trimmed, history },
+      userText: trimmed,
+      waiting: "Searching your documents",
+    });
+  }
+
+  /**
+   * Summarise a whole document.
+   *
+   * No history is sent, and none is needed: the summary is of the document,
+   * not of the conversation. It still appears as an ordinary turn so a
+   * follow-up question can refer back to it.
+   */
+  async function summarise(document) {
+    await run({
+      url: "/api/summarize",
+      body: { documentId: document.id },
+      userText: `Summarise ${document.title}`,
+      waiting: "Reading the whole document",
+    });
   }
 
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
@@ -206,7 +242,7 @@ export default function ChatPanel() {
             ) : (
               <div key={index} className="max-w-none">
                 {message.content === "" && isStreaming ? (
-                  <Spinner label="Searching the library" />
+                  <Spinner label={message.waiting ?? "Working"} />
                 ) : (
                   <>
                     <AnswerText
@@ -271,7 +307,12 @@ export default function ChatPanel() {
 
       {/* --------------------------------------------------------- sources */}
       <aside className="lg:sticky lg:top-6 lg:self-start">
-        <UploadPanel documents={documents} onChange={refreshDocuments} />
+        <UploadPanel
+          documents={documents}
+          onChange={refreshDocuments}
+          onSummarise={summarise}
+          isBusy={isStreaming}
+        />
 
         {siteConfig.mode.showCitations && (
           <>

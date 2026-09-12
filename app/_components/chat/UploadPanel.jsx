@@ -13,7 +13,7 @@ import Callout from "../ui/Callout";
  * looks idle during that is a control people click twice, so the button is
  * disabled and narrates what it is doing.
  */
-export default function UploadPanel({ documents, onChange }) {
+export default function UploadPanel({ documents, onChange, onSummarise, isBusy }) {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -126,14 +126,30 @@ export default function UploadPanel({ documents, onChange }) {
                   {document.pageCount} pages · {document.chunkCount} passages · removed after 24h
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => remove(document.id)}
-                aria-label={`Remove ${document.title}`}
-                className="shrink-0 rounded px-1.5 py-0.5 text-xs text-ink-faint transition-colors hover:bg-danger-soft hover:text-danger"
-              >
-                Remove
-              </button>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                {/*
+                  Summarising is the one thing here that is not a question, so
+                  it gets its own control rather than a suggested prompt the
+                  visitor has to think to type.
+                */}
+                <button
+                  type="button"
+                  onClick={() => onSummarise?.(document)}
+                  disabled={isBusy}
+                  aria-label={`Summarise ${document.title}`}
+                  className="rounded px-1.5 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary-soft disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Summarise
+                </button>
+                <button
+                  type="button"
+                  onClick={() => remove(document.id)}
+                  aria-label={`Remove ${document.title}`}
+                  className="rounded px-1.5 py-0.5 text-xs text-ink-faint transition-colors hover:bg-danger-soft hover:text-danger"
+                >
+                  Remove
+                </button>
+              </div>
             </li>
           ))}
         </ul>
