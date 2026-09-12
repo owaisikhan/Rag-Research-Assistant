@@ -16,7 +16,9 @@
 import { retrieve } from "@/app/_lib/rag/retrieve";
 import { streamAnswer, rewriteQuery } from "@/app/_lib/rag/answer";
 import { checkRateLimit, refundRateLimit, validateChatRequest } from "@/app/_lib/rag/limits";
-import { ensureSessionId } from "@/app/_lib/session";
+import { ensureSessionId, readSessionId } from "@/app/_lib/session";
+import { isSmallTalk, smallTalkReply } from "@/app/_lib/rag/smalltalk";
+import { createClient } from "@/app/_lib/supabase-server";
 
 // Node runtime: the embedding and Anthropic SDKs and node:crypto all want it.
 export const runtime = "nodejs";
@@ -37,6 +39,42 @@ function errorResponse(message, status) {
   });
 }
 
+/**
+ * How many documents this visitor has, for the wording of a canned reply.
+ *
+ * A database read rather than a number from the request body: it is only a
+ * plural, but a client-supplied value is a client-supplied value, and this
+ * costs one cheap query on a path that is rare by construction.
+ */
+async function countSessionDocuments() {
+  try {
+    const sessionId = await readSessionId();
+    if (!sessionId) return 0;
+
+    const supabase = await createClient();
+    const { data } = await supabase.rpc("session_documents", { p_session: sessionId });
+    return (data ?? []).length;
+  } catch {
+    // The wording degrades to the no-documents phrasing, which is never wrong
+    // enough to be worth failing a reply over.
+    return 0;
+  }
+}
+
+/** One complete answer, in the same NDJSON shape the streaming path uses. */
+function ndjsonResponse(text) {
+  const body =
+    `${JSON.stringify({ type: "sources", sources: [] })}\n` +
+    `${JSON.stringify({ type: "delta", text })}\n`;
+
+  return new Response(body, {
+    headers: {
+      "content-type": "application/x-ndjson; charset=utf-8",
+      "cache-control": "no-store",
+    },
+  });
+}
+
 export async function POST(request) {
   let body;
   try {
@@ -48,6 +86,15 @@ export async function POST(request) {
   const validated = validateChatRequest(body);
   if (!validated.ok) {
     return errorResponse(validated.message, 400);
+  }
+
+  const { question: askedQuestion } = validated;
+
+  // Answered before the rate limit is touched, and without calling any metered
+  // API at all: a greeting is not a search, and charging a slot for one is how
+  // a visitor spends their hour saying hello.
+  if (isSmallTalk(askedQuestion)) {
+    return ndjsonResponse(smallTalkReply(await countSessionDocuments()));
   }
 
   const { allowed, resetsAt } = await checkRateLimit(request);

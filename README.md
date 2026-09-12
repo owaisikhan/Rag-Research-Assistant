@@ -165,7 +165,7 @@ with a *different* session, while remaining visible to its own.
 
 | Limit | Value | Why |
 |---|---|---|
-| File size | 10 MB | |
+| File size | `UPLOAD_MAX_MB`, default 60 | See the platform caveat below |
 | Pages | 100 (ceiling) | The real gate is time, not pages -- see below |
 | Documents per visitor | 3 | |
 | Lifetime | 24 hours | Purged opportunistically; no scheduled job needed |
@@ -389,6 +389,23 @@ documents the visitor was promised were private.
 Desktop is tuned; mobile currently degrades rather than being designed. It does
 not overflow at 390px, but it has not had a layout pass.
 
+## Greetings are not searches
+
+"hello" used to go through the whole pipeline: rewrite the query, embed it, run
+hybrid retrieval, send a dozen passages of price-comparison rows to the model,
+and stream back an answer explaining that the documents do not contain
+greetings. That is an embedding request, a generation request and one of the
+visitor's twelve hourly slots, spent on a word that was never about the
+documents.
+
+A closed list of exact phrases now short-circuits before the rate limit is
+touched and without calling any metered API. Matching is exact on the whole
+normalised message, and that is the important part: a fuzzy "does this look
+like a question" heuristic would be worse than nothing, because "rent?" and
+"total?" are real questions, short and content-free. Anything not on the list
+takes the normal path, so the failure mode is a greeting that gets searched —
+today's behaviour, and harmless.
+
 ## Rate limiting
 
 Twelve questions per hour per caller, counted in Postgres rather than in
@@ -404,6 +421,19 @@ the hard way: with the model's daily quota exhausted, twelve failed questions
 spent the whole hour and produced nothing, and the app then blamed the visitor
 for asking too much. A partial answer is not refunded — the visitor got
 something and the call was billed.
+
+### A note on upload size
+
+`UPLOAD_MAX_MB` (default 60) is the app's own limit. **The platform has its own,
+much lower, cap on a function's request body**, enforced before the function
+runs — so on the deployment a large upload fails at the edge with a platform
+error rather than reaching this check and getting a sentence explaining itself.
+Vercel's documented answer for large files is to send them straight from the
+browser to blob storage and hand the function a URL, which is a different shape
+of upload than this one.
+
+So the raised limit works locally and does not, on its own, make large uploads
+work in production. Worth testing against the deployment before relying on it.
 
 ### Turning it off for testing
 

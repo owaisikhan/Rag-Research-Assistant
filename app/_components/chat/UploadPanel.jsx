@@ -128,7 +128,7 @@ export default function UploadPanel({
                 Choose a PDF
               </label>
               <p className="mt-3 text-sm text-ink-muted">
-                or drop one here — up to 10 MB
+                or drop one here
               </p>
               <p className="mx-auto mt-4 max-w-sm text-xs text-ink-faint">
                 Answers are built only from passages retrieved out of your own

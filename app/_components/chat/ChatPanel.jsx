@@ -383,7 +383,7 @@ export default function ChatPanel() {
             <div ref={endRef} />
           </div>
 
-          <div className="sticky bottom-0 mt-6 bg-surface pb-4 pt-3">
+          <div className="measure sticky bottom-0 mt-6 bg-surface pb-4 pt-3">
             <Composer
               value={input}
               onChange={setInput}
@@ -396,7 +396,7 @@ export default function ChatPanel() {
             />
 
             {isEmpty && (
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-5 flex flex-wrap gap-2">
                 {STARTERS.map((starter) => (
                   <button
                     key={starter}

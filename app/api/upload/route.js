@@ -48,7 +48,20 @@ const EMBED_RPM = Number(process.env.GEMINI_EMBED_RPM || 95);
 // Two thirds for embedding is conservative and has held in testing.
 const EMBED_SHARE = 0.66;
 
-const MAX_BYTES = 10 * 1024 * 1024;
+// Raised from 10 MB for local testing of large documents.
+//
+// CAVEAT WORTH KNOWING BEFORE RELYING ON IT: a serverless function's REQUEST
+// BODY is capped by the platform, well below this, and that cap is enforced
+// before the function ever runs -- so on the deployment a large upload fails
+// at the edge with a platform error rather than reaching this check and
+// getting a sentence explaining itself. Vercel's own answer to large uploads
+// is to send the file straight from the browser to blob storage and hand the
+// function a URL instead, which is a different shape of upload than this.
+//
+// So: works locally, and does not on its own make large uploads work in
+// production.
+const MAX_MB = Number(process.env.UPLOAD_MAX_MB || 60);
+const MAX_BYTES = MAX_MB * 1024 * 1024;
 // Chunks are inserted in batches for the same reason as the ingestion script:
 // each row carries a 1536-float embedding, so a large batch becomes a
 // multi-megabyte request that fails for long documents only.
@@ -79,7 +92,7 @@ export async function POST(request) {
 
   if (file.size > MAX_BYTES) {
     return fail(
-      `That file is ${(file.size / 1024 / 1024).toFixed(1)} MB; the limit is 10 MB.`,
+      `That file is ${(file.size / 1024 / 1024).toFixed(1)} MB; the limit is ${MAX_MB} MB.`,
       400
     );
   }

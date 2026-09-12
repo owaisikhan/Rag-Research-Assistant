@@ -40,6 +40,10 @@
 
   --color-success: oklch(70% 0.110 150);
 
+  /* ~78 characters at 1rem in this font: the upper end of a comfortable
+     reading measure. */
+  --measure: 50rem;
+
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", serif;
@@ -111,6 +115,13 @@
 }
 
 @layer components {
+  /* The reading measure. One value, shared by the prose and by the composer
+     under it, so the column of text and the box you type into have the same
+     left and right edges. */
+  .measure {
+    max-width: var(--measure);
+  }
+
   /* The composer's lift. A hairline ring and a plain shadow -- the job is to
      separate it from the page, not to glow. */
   .composer-ring {
@@ -133,8 +144,12 @@
     /* A measure cap, not a width. The column is wide now, but a line of prose
        past roughly 80 characters is measurably harder to read -- the eye loses
        its place returning to the next line. So the layout uses the width and
-       the text does not. */
-    max-width: 78ch;
+       the text does not.
+
+       In rem rather than ch: 78ch measured 49.6rem here, but ch depends on the
+       font, so the composer below could never line up with the text above it
+       without guessing. A shared rem value makes them agree by construction. */
+    max-width: var(--measure);
   }
 
   .answer-prose p + p {
