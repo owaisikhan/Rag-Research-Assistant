@@ -235,6 +235,50 @@ Two consequences worth knowing:
   invisible with no session and to a *different* session, visible only to its
   owner, and a half-indexed one is invisible even to its owner.
 
+## The interface
+
+Dark-first, built around a single focal composer, with a violet-to-magenta
+brand sweep defined once in `.brand-gradient` so the rail, the send button and
+the focus glow cannot drift apart.
+
+Theme is a `data-theme` attribute on `<html>`, applied by a blocking script in
+`<head>` before first paint — otherwise a light-theme visitor watches the page
+render dark and then flip. It defaults to dark even on a light-mode machine:
+the design is dark-first and the toggle is one click away.
+
+Two traps worth knowing, both of which bit during the build:
+
+- **`@theme` cannot be nested.** Tailwind v4 hoists its declarations out of
+  whatever wraps them, so a dark block inside `@media` is emitted
+  unconditionally and wins. The light palette is a plain
+  `:root[data-theme="light"]` rule for that reason.
+- **An animation that sets `opacity` beats an `opacity` declaration.** Dimming
+  the idle orb in light mode silently did nothing until peak opacity was moved
+  into a `--orb-opacity` custom property the keyframes read.
+
+### What is real, and what is staged
+
+The shell carries controls the product does not have behind it yet, because a
+pitch reads better when it looks like a product than a page. **Every staged
+control says what it will do when clicked** rather than sitting dead — a button
+that looks live and does nothing reads as broken, not as unfinished.
+
+| Real today | Staged |
+|---|---|
+| Ask, with streaming answers | Global search |
+| Attach a PDF (the composer's `+`) | Notifications |
+| Summarise a document | Account / sign-in |
+| Copy an answer | Sidebar sections (Overview, Library, Insights, Billing, Preferences) |
+| Export chat to Markdown | Voice input |
+| Clear chat | Web search alongside documents |
+| Fullscreen | Improve-this-question |
+| Light / dark theme | Output format (table / JSON) |
+| Remove a document | Share a conversation by link |
+
+Share is staged on purpose rather than for time: a shareable link means storing
+a conversation server-side under a public id, which is a privacy decision about
+documents the visitor was promised were private.
+
 ## Adding your own documents
 
 Drop PDFs into `corpus/` and run `npm run corpus:ingest`. Anything already
@@ -306,7 +350,10 @@ citation that does not check out, which is worse than no citation at all.
 ```
 app/
   _components/ui/          generic, knows nothing about the domain
-  _components/chat/        the conversation, citations and source panel
+  _components/ui/Icon.jsx  the icon set, as inline SVG (no icon package)
+  _components/ui/Toaster.jsx  transient feedback; staged controls speak here
+  _components/shell/       sidebar rail, top bar, pre-paint theme script
+  _components/chat/        the conversation, composer, citations, sources
   _lib/
     rag/embed.js           embedding provider (swappable)
     rag/retrieve.js        hybrid search

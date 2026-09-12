@@ -1,61 +1,82 @@
 @import "tailwindcss";
 
 /* Colour tokens are named by ROLE, never by hue, so a rebrand is a token swap
-   rather than a grep for "slate". */
+   rather than a grep for "violet".
+
+   DARK IS THE DEFAULT here, which is a change: the product reads as a piece of
+   software rather than a document, and the dark palette is what carries the
+   glow and gradient work. Light is a real, complete theme -- not an
+   afterthought -- reachable from the toggle in the top bar. */
 @theme {
-  --color-surface: oklch(99% 0.003 265);
-  --color-surface-raised: oklch(100% 0 0);
-  --color-surface-sunken: oklch(96.5% 0.005 265);
+  /* Near-black with a violet cast, rather than neutral grey. A true grey
+     under a violet accent reads as dirty; sharing the hue keeps it clean. */
+  --color-surface: oklch(13.5% 0.025 283);
+  --color-surface-raised: oklch(18% 0.028 283);
+  --color-surface-sunken: oklch(10.5% 0.022 283);
 
-  --color-border: oklch(91% 0.006 265);
-  --color-border-strong: oklch(84% 0.008 265);
+  /* Borders are translucent white rather than a solid step, so a raised
+     surface over a glow still reads as edged instead of banded. */
+  --color-border: oklch(100% 0 0 / 0.10);
+  --color-border-strong: oklch(100% 0 0 / 0.18);
 
-  --color-ink: oklch(22% 0.015 265);
-  --color-ink-muted: oklch(50% 0.014 265);
-  --color-ink-faint: oklch(63% 0.012 265);
+  --color-ink: oklch(98% 0.003 248);
+  --color-ink-muted: oklch(74% 0.02 278);
+  --color-ink-faint: oklch(58% 0.025 280);
 
-  --color-primary: oklch(52% 0.16 258);
-  --color-primary-hover: oklch(46% 0.16 258);
-  --color-primary-soft: oklch(95% 0.03 258);
+  --color-primary: oklch(58% 0.26 287);
+  --color-primary-hover: oklch(65% 0.24 287);
+  --color-primary-soft: oklch(28% 0.09 287);
 
-  --color-danger: oklch(55% 0.19 25);
-  --color-danger-soft: oklch(96% 0.03 25);
+  /* The second stop of every gradient. Magenta, not blue: the violet-to-
+     magenta sweep is what makes the brand read as one thing. */
+  --color-accent: oklch(65% 0.28 322);
+
+  --color-danger: oklch(64% 0.21 18);
+  --color-danger-soft: oklch(28% 0.08 18);
+
+  --color-success: oklch(72% 0.17 155);
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", serif;
 }
 
-/* Dark mode overrides the SAME tokens on :root.
-   `@theme` cannot be nested inside `@media` -- Tailwind v4 hoists its
-   declarations out, so a nested dark block is emitted unconditionally and
-   wins the cascade, leaving the page permanently dark. A plain :root rule
-   inside the media query is the supported way to swap a token set. */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-surface: oklch(19% 0.012 265);
-    --color-surface-raised: oklch(23% 0.014 265);
-    --color-surface-sunken: oklch(16% 0.012 265);
+/* Light theme.
+   A plain :root rule, NOT a nested @theme -- Tailwind v4 hoists @theme
+   declarations out of whatever wraps them, so a nested block is emitted
+   unconditionally and wins the cascade. That is how this project once shipped
+   a permanently dark page. */
+:root[data-theme="light"] {
+  --color-surface: oklch(98.5% 0.004 285);
+  --color-surface-raised: oklch(100% 0 0);
+  --color-surface-sunken: oklch(96% 0.006 285);
 
-    --color-border: oklch(31% 0.014 265);
-    --color-border-strong: oklch(40% 0.016 265);
+  --color-border: oklch(20% 0.02 285 / 0.12);
+  --color-border-strong: oklch(20% 0.02 285 / 0.22);
 
-    --color-ink: oklch(95% 0.005 265);
-    --color-ink-muted: oklch(72% 0.012 265);
-    --color-ink-faint: oklch(58% 0.012 265);
+  --color-ink: oklch(20% 0.02 285);
+  --color-ink-muted: oklch(48% 0.02 285);
+  --color-ink-faint: oklch(62% 0.02 285);
 
-    --color-primary: oklch(72% 0.14 258);
-    --color-primary-hover: oklch(78% 0.14 258);
-    --color-primary-soft: oklch(28% 0.05 258);
+  --color-primary: oklch(52% 0.25 287);
+  --color-primary-hover: oklch(46% 0.25 287);
+  --color-primary-soft: oklch(95% 0.035 287);
 
-    --color-danger: oklch(70% 0.16 25);
-    --color-danger-soft: oklch(28% 0.06 25);
-  }
+  --color-accent: oklch(58% 0.26 322);
+
+  --color-danger: oklch(53% 0.21 18);
+  --color-danger-soft: oklch(96% 0.03 18);
+
+  --color-success: oklch(52% 0.15 155);
 }
 
 @layer base {
   html {
-    color-scheme: light dark;
+    color-scheme: dark;
+  }
+
+  :root[data-theme="light"] {
+    color-scheme: light;
   }
 
   body {
@@ -65,15 +86,55 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  /* Focus must be visible for keyboard users, and must not be the only way a
-     control announces itself. */
   :focus-visible {
     outline: 2px solid var(--color-primary);
     outline-offset: 2px;
   }
+
+  /* A scrollbar that matches the surface instead of punching a light strip
+     through a dark page. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+  }
 }
 
 @layer components {
+  /* The brand sweep. One definition, so the rail, the send button and the
+     focus glow cannot drift apart. */
+  .brand-gradient {
+    background-image: linear-gradient(
+      135deg,
+      var(--color-primary) 0%,
+      var(--color-accent) 100%
+    );
+  }
+
+  .brand-text {
+    background-image: linear-gradient(
+      135deg,
+      var(--color-primary) 0%,
+      var(--color-accent) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* The composer's lift. A ring plus a wide soft shadow in the brand hue --
+     the thing that makes the input read as the focal point of the page. */
+  .composer-glow {
+    box-shadow:
+      0 0 0 1px var(--color-border),
+      0 18px 50px -12px oklch(58% 0.26 287 / 0.28);
+  }
+
+  .composer-glow:focus-within {
+    box-shadow:
+      0 0 0 1px var(--color-primary),
+      0 18px 60px -10px oklch(58% 0.26 287 / 0.45);
+  }
+
   /* The answer body. Slightly larger and looser than UI text, because it is
      read as prose rather than scanned. */
   .answer-prose {
@@ -101,6 +162,41 @@
   }
 }
 
+/* The idle orb behind an empty conversation. Pure CSS -- a radial gradient
+   with a slow breath -- rather than an image or a canvas, so it costs nothing
+   to load and recolours with the theme. */
+/* Peak opacity comes from --orb-opacity rather than being hard-coded, because
+   an animation that sets `opacity` overrides any opacity declared on the
+   element -- so the obvious "dim it in light mode" rule silently does nothing.
+   Custom properties are not animatable, but they ARE substituted per keyframe,
+   which is exactly what is needed here. */
+@keyframes orb-breathe {
+  0%, 100% { transform: scale(1); opacity: calc(var(--orb-opacity) * 0.85); }
+  50%      { transform: scale(1.06); opacity: var(--orb-opacity); }
+}
+
+/* The orb is a dark-theme device: the same gradient over white is a purple
+   smear that swallows the text in front of it. Light gets a much fainter
+   version rather than none, so the empty state still has a centre. */
+:root[data-theme="light"] .idle-orb {
+  --orb-opacity: 0.28;
+  opacity: 0.28; /* the reduced-motion path, where the animation is off */
+}
+
+.idle-orb {
+  --orb-opacity: 1;
+  opacity: var(--orb-opacity);
+  background-image: radial-gradient(
+    circle at 50% 50%,
+    oklch(30% 0.14 300 / 0.9) 0%,
+    oklch(58% 0.26 287 / 0.55) 38%,
+    oklch(65% 0.28 322 / 0.22) 58%,
+    transparent 72%
+  );
+  filter: blur(18px);
+  animation: orb-breathe 6s ease-in-out infinite;
+}
+
 /* The caret that trails a streaming answer, so it is obvious the reply is
    still being written rather than finished and truncated. */
 @keyframes caret-blink {
@@ -118,6 +214,17 @@
   animation: caret-blink 1.1s steps(1) infinite;
 }
 
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.toast-in {
+  animation: toast-in 180ms ease-out;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .streaming-caret { animation: none; opacity: 1; }
+  .idle-orb { animation: none; }
+  .toast-in { animation: none; }
 }

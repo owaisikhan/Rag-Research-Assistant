@@ -5,18 +5,23 @@ import { useRef, useState, useEffect } from "react";
 import AnswerText from "./AnswerText";
 import SourceCard from "./SourceCard";
 import UploadPanel from "./UploadPanel";
+import Composer from "./Composer";
+import OptionsMenu from "./OptionsMenu";
+import Icon from "../ui/Icon";
+import { useToast } from "../ui/Toaster";
 import { siteConfig } from "@/app/_lib/siteConfig";
 import Spinner from "../ui/Spinner";
 import Callout from "../ui/Callout";
 
-const SUGGESTIONS = [
-  "What approaches do these papers take to detecting malicious network traffic?",
-  "Summarise what the library says about zero trust architecture.",
-  "Where do these documents disagree with each other?",
+const STARTERS = [
+  "What is this document about?",
+  "What are the key points?",
+  "Is there anything here I should be careful about?",
+  "What does it say about dates and deadlines?",
 ];
 
 /**
- * Read the NDJSON stream from /api/chat.
+ * Read the NDJSON stream from /api/chat and /api/summarize.
  *
  * Chunks do not arrive on line boundaries, so a partial line is carried over
  * to the next read. Parsing each chunk independently loses whatever straddled
@@ -57,15 +62,18 @@ async function* readNdjson(response) {
 }
 
 export default function ChatPanel() {
+  const notify = useToast();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState(null);
   const [activeCitation, setActiveCitation] = useState(null);
   const [documents, setDocuments] = useState([]);
+  const [pendingFile, setPendingFile] = useState(null);
 
-  // The parent owns the uploaded-document list so the suggestions can change
-  // once a visitor has their own document in play.
+  const endRef = useRef(null);
+  const inputRef = useRef(null);
+
   async function refreshDocuments() {
     try {
       const response = await fetch("/api/documents");
@@ -76,9 +84,6 @@ export default function ChatPanel() {
     }
   }
 
-  const endRef = useRef(null);
-  const inputRef = useRef(null);
-
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, isStreaming]);
@@ -88,8 +93,8 @@ export default function ChatPanel() {
    *
    * /api/chat and /api/summarize speak the same wire format, so the only
    * things that differ are the URL, the body, and what the user's own turn
-   * says. Keeping one reader means a fix to stream handling cannot land on
-   * one path and miss the other.
+   * says. One reader means a fix to stream handling cannot land on one path
+   * and miss the other.
    */
   async function run({ url, body, userText, waiting }) {
     if (isStreaming) return;
@@ -141,6 +146,11 @@ export default function ChatPanel() {
     const trimmed = question.trim();
     if (trimmed === "" || isStreaming) return;
 
+    if (documents.length === 0) {
+      notify("Upload a PDF first — answers come only from your own documents.");
+      return;
+    }
+
     setInput("");
 
     // Only completed turns go back as history -- the turn being written is
@@ -174,73 +184,76 @@ export default function ChatPanel() {
     });
   }
 
+  function clearChat() {
+    if (messages.length === 0) {
+      notify("The conversation is already empty.");
+      return;
+    }
+    setMessages([]);
+    setError(null);
+    setActiveCitation(null);
+    notify("Conversation cleared.", { tone: "success" });
+  }
+
+  async function copyAnswer(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      notify("Answer copied.", { tone: "success" });
+    } catch {
+      notify("This browser would not allow copying.", { tone: "danger" });
+    }
+  }
+
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
   const visibleSources = lastAssistant?.sources ?? [];
+  const isEmpty = messages.length === 0;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
       {/* ---------------------------------------------------- conversation */}
-      {/*
-        self-start matters. Without it the grid stretches this column to match
-        the sources column, which is routinely taller, and flex-1 then pushes
-        the composer to the bottom of that stretched height -- leaving a few
-        hundred pixels of blank space between the end of the answer and the
-        input box. Sizing to content keeps the composer under the conversation,
-        and sticky still pins it once the answer is taller than the viewport.
-      */}
       <div className="flex min-w-0 flex-col self-start">
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">
+              {siteConfig.name}
+            </h1>
+            <p className="mt-1 text-sm text-ink-muted">{siteConfig.tagline}</p>
+          </div>
+          <OptionsMenu messages={messages} onClear={clearChat} />
+        </div>
+
         <div className="flex-1 space-y-5">
-          {messages.length === 0 && (
-            <div className="rounded-xl border border-border bg-surface-raised p-5">
-              {documents.length === 0 ? (
-                <>
-                  <p className="text-sm text-ink">
-                    Upload a PDF to get started.
-                  </p>
-                  <p className="mt-1.5 text-sm text-ink-muted">
-                    Ask anything about it and the answer will be built only from
-                    what is actually in your document — never from outside it.
-                    Nothing is stored beyond 24 hours, and only you can see what
-                    you upload.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-sm text-ink-muted">
-                    Ask anything about your {documents.length === 1 ? "document" : "documents"}.
-                    Answers come only from what is in them.
-                  </p>
-                  <ul className="mt-4 space-y-2">
-                    {[
-                      `What is ${documents[0].title} about?`,
-                      "What are the key points?",
-                      "Is there anything here I should be careful about?",
-                    ].map((suggestion) => (
-                      <li key={suggestion}>
-                        <button
-                          type="button"
-                          onClick={() => ask(suggestion)}
-                          className="w-full rounded-lg border border-border px-3 py-2 text-left text-sm text-ink transition-colors hover:border-primary hover:bg-primary-soft"
-                        >
-                          {suggestion}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
+          {isEmpty && (
+            <div className="relative flex flex-col items-center justify-center py-10 text-center sm:py-16">
+              {/* The orb. Pure decoration, and the reason the empty state
+                  reads as a product waiting rather than a page missing its
+                  content. */}
+              <div className="idle-orb pointer-events-none absolute h-56 w-56 rounded-full" />
+
+              <div className="relative">
+                <p className="text-base font-medium text-ink">
+                  {documents.length === 0
+                    ? "Upload a PDF to get started"
+                    : `Ask anything about your ${documents.length === 1 ? "document" : "documents"}`}
+                </p>
+                <p className="mx-auto mt-2 max-w-md text-sm text-ink-muted">
+                  {documents.length === 0
+                    ? "Every answer is built only from passages retrieved out of your own document — never from outside it."
+                    : `Answers come only from what is in ${documents.length === 1 ? "it" : "them"}, so you can check every claim.`}
+                </p>
+              </div>
             </div>
           )}
 
           {messages.map((message, index) =>
             message.role === "user" ? (
               <div key={index} className="flex justify-end">
-                <p className="max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-4 py-2.5 text-sm text-white">
+                <p className="brand-gradient max-w-[85%] rounded-2xl rounded-br-sm px-4 py-2.5 text-sm text-white shadow-md">
                   {message.content}
                 </p>
               </div>
             ) : (
-              <div key={index} className="max-w-none">
+              <div key={index} className="group max-w-none">
                 {message.content === "" && isStreaming ? (
                   <Spinner label={message.waiting ?? "Working"} />
                 ) : (
@@ -254,6 +267,21 @@ export default function ChatPanel() {
                     {isStreaming && index === messages.length - 1 && (
                       <span className="streaming-caret" aria-hidden="true" />
                     )}
+
+                    {/* Appears on hover, as the reference does. Copy is real;
+                        it is the one message action worth having. */}
+                    {message.content !== "" && (
+                      <div className="mt-2 flex gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                        <button
+                          type="button"
+                          onClick={() => copyAnswer(message.content)}
+                          className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-ink-faint transition-colors hover:bg-primary-soft hover:text-primary"
+                        >
+                          <Icon name="copy" className="h-3.5 w-3.5" />
+                          Copy
+                        </button>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -265,44 +293,45 @@ export default function ChatPanel() {
         </div>
 
         {/* ------------------------------------------------------- composer */}
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            ask(input);
-          }}
-          className="sticky bottom-0 mt-6 bg-surface pt-3"
-        >
-          <div className="flex items-end gap-2 rounded-xl border border-border bg-surface-raised p-2 focus-within:border-primary">
-            <label htmlFor="question" className="sr-only">
-              Your question
-            </label>
-            <textarea
-              id="question"
-              ref={inputRef}
-              rows={1}
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                // Enter sends, Shift+Enter breaks the line -- the convention
-                // every chat interface has trained people to expect.
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  ask(input);
-                }
-              }}
-              placeholder={documents.length === 0 ? "Upload a PDF first…" : "Ask a question about your documents…"}
-              disabled={isStreaming || documents.length === 0}
-              className="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-ink outline-none placeholder:text-ink-faint disabled:opacity-60"
-            />
-            <button
-              type="submit"
-              disabled={isStreaming || input.trim() === "" || documents.length === 0}
-              className="rounded-lg bg-primary px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {isStreaming ? "…" : "Ask"}
-            </button>
-          </div>
-        </form>
+        <div className="sticky bottom-0 mt-6 bg-surface pt-3">
+          <Composer
+            value={input}
+            onChange={setInput}
+            onSubmit={() => ask(input)}
+            onAttach={(file) => setPendingFile(file)}
+            disabled={documents.length === 0}
+            isStreaming={isStreaming}
+            inputRef={inputRef}
+            placeholder={
+              documents.length === 0
+                ? "Upload a PDF first…"
+                : "Ask anything about your documents…"
+            }
+          />
+
+          {isEmpty && documents.length > 0 && (
+            <div className="mt-4">
+              <p className="mb-2 text-center text-xs text-ink-faint">Try asking</p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {STARTERS.map((starter) => (
+                  <button
+                    key={starter}
+                    type="button"
+                    onClick={() => ask(starter)}
+                    className="rounded-full border border-border bg-surface-raised px-3.5 py-1.5 text-xs text-ink-muted transition-colors hover:border-primary hover:text-primary"
+                  >
+                    {starter}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <p className="mt-3 text-center text-xs text-ink-faint">
+            Click + to attach a PDF · Hover an answer to copy it · Uploads are
+            deleted after 24 hours
+          </p>
+        </div>
       </div>
 
       {/* --------------------------------------------------------- sources */}
@@ -312,6 +341,8 @@ export default function ChatPanel() {
           onChange={refreshDocuments}
           onSummarise={summarise}
           isBusy={isStreaming}
+          incomingFile={pendingFile}
+          onIncomingHandled={() => setPendingFile(null)}
         />
 
         {siteConfig.mode.showCitations && (
