@@ -129,7 +129,15 @@ export default function ChatPanel() {
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
       {/* ---------------------------------------------------- conversation */}
-      <div className="flex min-w-0 flex-col">
+      {/*
+        self-start matters. Without it the grid stretches this column to match
+        the sources column, which is routinely taller, and flex-1 then pushes
+        the composer to the bottom of that stretched height -- leaving a few
+        hundred pixels of blank space between the end of the answer and the
+        input box. Sizing to content keeps the composer under the conversation,
+        and sticky still pins it once the answer is taller than the viewport.
+      */}
+      <div className="flex min-w-0 flex-col self-start">
         <div className="flex-1 space-y-5">
           {messages.length === 0 && (
             <div className="rounded-xl border border-border bg-surface-raised p-5">

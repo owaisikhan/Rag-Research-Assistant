@@ -17,7 +17,7 @@
  */
 
 const CITATION = /(\[\d+\])/g;
-const INLINE = /(\*\*[^*]+\*\*|`[^`]+`)/g;
+const INLINE = /(\*\*[^*]+\*\*|\*[^*\n]+\*|_[^_\n]+_|`[^`]+`)/g;
 
 /** Bold, inline code, and citations, in that order of nesting. */
 function renderInline(text, { byNumber, onCite, activeNumber, keyPrefix }) {
@@ -29,6 +29,19 @@ function renderInline(text, { byNumber, onCite, activeNumber, keyPrefix }) {
         <strong key={key} className="font-semibold">
           {renderCitations(segment.slice(2, -2), { byNumber, onCite, activeNumber, keyPrefix: key })}
         </strong>
+      );
+    }
+
+    // Italic: *text* or _text_. Checked after bold, since ** also starts *.
+    const isItalic =
+      (segment.startsWith("*") && segment.endsWith("*") && segment.length > 2) ||
+      (segment.startsWith("_") && segment.endsWith("_") && segment.length > 2);
+
+    if (isItalic) {
+      return (
+        <em key={key} className="italic">
+          {renderCitations(segment.slice(1, -1), { byNumber, onCite, activeNumber, keyPrefix: key })}
+        </em>
       );
     }
 
@@ -103,6 +116,13 @@ function toBlocks(text) {
     const line = rawLine.trim();
 
     if (line === "") {
+      closeList();
+      continue;
+    }
+
+    // A horizontal rule carries no meaning inside a short answer and renders
+    // as three literal dashes if ignored. Dropped rather than drawn.
+    if (/^([-*_])\1{2,}$/.test(line.replace(/\s/g, ""))) {
       closeList();
       continue;
     }
