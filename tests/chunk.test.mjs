@@ -79,3 +79,34 @@ test("empty input produces no chunks rather than throwing", () => {
 test("token estimate is monotonic in length", () => {
   assert.ok(estimateTokens("a".repeat(400)) > estimateTokens("a".repeat(100)));
 });
+
+test("the title block is dropped when the document has sections", () => {
+  const chunks = chunkPages([
+    [
+      "Predicting Privacy Leakage from Weight Spectral Density",
+      "Richard J. Preen, University of the West of England",
+      "richard.preen@uwe.ac.uk",
+      "Abstract",
+      paragraph(200),
+    ].join("\n"),
+    ["1 Introduction", paragraph(300)].join("\n"),
+  ]);
+
+  assert.ok(chunks.length > 0, "expected chunks to survive");
+  assert.ok(
+    !chunks.some((c) => c.content.includes("richard.preen@uwe.ac.uk")),
+    "author/affiliation front matter must not be retrievable"
+  );
+  assert.ok(
+    chunks.every((c) => c.section !== null),
+    "every surviving chunk should sit under a heading"
+  );
+});
+
+test("a document with no headings keeps its opening", () => {
+  // A report or letter whose first page IS the content. Dropping it would be
+  // worse than the front-matter noise the rule exists to remove.
+  const chunks = chunkPages([paragraph(300), paragraph(300)]);
+  assert.ok(chunks.length > 0, "content was discarded from a heading-less document");
+  assert.ok(chunks[0].pageStart === 1, "the opening page should survive");
+});

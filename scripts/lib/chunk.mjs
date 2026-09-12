@@ -72,6 +72,32 @@ function findReferencesCutoff(blocks) {
 }
 
 /**
+ * Drop the title block: title, authors, affiliations, emails, the arXiv stamp.
+ *
+ * It is retrieved constantly and answers nothing. Worse, it is retrieved for
+ * the WRONG reason -- it contains the paper's title, so keyword search scores
+ * it highly for any query about the paper's own subject, pushing out a passage
+ * that actually makes a claim. Same argument as the bibliography.
+ *
+ * Only applied when the document has real headings. A document with no
+ * detected sections might be a report or a letter whose opening IS the
+ * content, and dropping its first page would be worse than the noise.
+ */
+function findFrontMatterEnd(blocks) {
+  const hasSections = blocks.some((block) => block.section !== null);
+  if (!hasSections) return 0;
+
+  // Everything before the first block that carries a section, provided it is
+  // confined to the first page. A section-less run deeper into the document is
+  // body text the heading detector simply missed.
+  let end = 0;
+  while (end < blocks.length && blocks[end].section === null && blocks[end].page === 1) {
+    end++;
+  }
+  return end;
+}
+
+/**
  * Break a block that is already larger than the whole chunk budget.
  *
  * Extraction does not guarantee line breaks: a page can come back as one
@@ -165,7 +191,10 @@ function toBlocks(pages) {
  */
 export function chunkPages(pages) {
   const allBlocks = toBlocks(pages);
-  const blocks = allBlocks.slice(0, findReferencesCutoff(allBlocks));
+  const blocks = allBlocks.slice(
+    findFrontMatterEnd(allBlocks),
+    findReferencesCutoff(allBlocks)
+  );
 
   const chunks = [];
   let current = [];
