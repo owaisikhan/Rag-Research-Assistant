@@ -290,6 +290,22 @@ whatever wraps them, so a dark block inside `@media` is emitted unconditionally
 and wins. The light palette is a plain `:root[data-theme="light"]` rule for
 that reason.
 
+### Contrast
+
+Every foreground/background pair in both themes is measured against the WCAG
+4.5:1 floor for body text rather than eyeballed. Two things came out of doing
+that rather than trusting the eye:
+
+- `ink-faint` failed in **both** themes — 3.68:1 in light, 3.77:1 on a raised
+  dark surface — and it is the token carrying helper text, page counts and the
+  footer. Light moved 60% → 53.5% and dark 55% → 60%, each the least
+  aggressive value that clears the floor.
+- The light page was 97.5% against 100% cards: a 2.5% step, so no panel had a
+  visible edge. That reads as "low contrast" before you look at a single
+  character. The page is now 96% with firmer borders (0.14 → 0.20 alpha).
+
+All 22 pairs pass in both themes.
+
 ### What was removed, and why
 
 An earlier pass copied a reference chatbot template: a gradient nav rail, a

@@ -24,7 +24,7 @@
 
   --color-ink: oklch(93% 0.010 85);
   --color-ink-muted: oklch(71% 0.014 78);
-  --color-ink-faint: oklch(55% 0.013 75);
+  --color-ink-faint: oklch(60% 0.013 75);
 
   --color-primary: oklch(77% 0.125 72);
   --color-primary-hover: oklch(83% 0.120 75);
@@ -51,16 +51,24 @@
    unconditionally and wins the cascade. That is how this project once shipped
    a permanently dark page. */
 :root[data-theme="light"] {
-  --color-surface: oklch(97.5% 0.006 85);
+  /* The page is a shade below pure white so a raised card reads as raised.
+     At 97.5% against a 100% card the step was 2.5% and every panel floated
+     without an edge, which is most of what "low contrast" feels like before
+     you look at any text. */
+  --color-surface: oklch(96% 0.007 85);
   --color-surface-raised: oklch(100% 0.002 85);
-  --color-surface-sunken: oklch(95% 0.008 85);
+  --color-surface-sunken: oklch(93.5% 0.009 85);
 
-  --color-border: oklch(25% 0.02 70 / 0.14);
-  --color-border-strong: oklch(25% 0.02 70 / 0.26);
+  /* Firmer. At 0.14 alpha a border on a near-white page is a suggestion. */
+  --color-border: oklch(25% 0.02 70 / 0.20);
+  --color-border-strong: oklch(25% 0.02 70 / 0.34);
 
-  --color-ink: oklch(24% 0.015 70);
-  --color-ink-muted: oklch(46% 0.015 70);
-  --color-ink-faint: oklch(60% 0.015 70);
+  --color-ink: oklch(22% 0.015 70);
+  --color-ink-muted: oklch(44% 0.015 70);
+  /* Was 60%, which measured 3.68:1 on the page -- below the 4.5:1 floor for
+     body text, and this token carries helper text, page counts and the
+     footer. 53.5% is the lightest value that clears it. */
+  --color-ink-faint: oklch(53.5% 0.015 70);
 
   --color-primary: oklch(50% 0.115 62);
   --color-primary-hover: oklch(43% 0.115 62);
