@@ -9,6 +9,10 @@ import "server-only";
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
+// Extra output budget set aside for reasoning tokens. Measured: a 12-passage
+// prompt spends 300-500 thinking tokens before writing anything.
+const THINKING_HEADROOM = 4096;
+
 /**
  * Gemini calls the assistant "model", not "assistant". The wrong role name is
  * rejected outright; an inconsistent one silently confuses the model about who
@@ -31,30 +35,54 @@ function toGeminiContents(messages) {
  * @param {number} params.maxTokens
  * @returns {AsyncGenerator<string>}
  */
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export async function* streamGemini({ model, system, messages, maxTokens }) {
-  const response = await fetch(`${BASE}/${model}:streamGenerateContent?alt=sse`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-goog-api-key": process.env.GEMINI_API_KEY,
+  const body = JSON.stringify({
+    // The system prompt is a separate field, not a message with a role.
+    systemInstruction: { parts: [{ text: system }] },
+    contents: toGeminiContents(messages),
+    generationConfig: {
+      // Thinking tokens count against this budget on 3.x models, and they are
+      // not small -- a RAG prompt of a dozen passages regularly draws several
+      // hundred. Passing the caller's answer budget directly truncates the
+      // answer mid-sentence, with finishReason MAX_TOKENS and no other signal.
+      // The headroom is for reasoning, not for a longer answer.
+      maxOutputTokens: maxTokens + THINKING_HEADROOM,
+      // Low but not zero. This task is extraction and attribution, where
+      // invention is a liability -- but zero makes repetitive phrasing and
+      // occasional loops more likely.
+      temperature: 0.2,
     },
-    body: JSON.stringify({
-      // The system prompt is a separate field, not a message with a role.
-      systemInstruction: { parts: [{ text: system }] },
-      contents: toGeminiContents(messages),
-      generationConfig: {
-        maxOutputTokens: maxTokens,
-        // Low but not zero. This task is extraction and attribution, where
-        // invention is a liability -- but zero makes repetitive phrasing and
-        // occasional loops more likely.
-        temperature: 0.2,
-      },
-    }),
   });
 
-  if (!response.ok) {
+  // The free tier returns 503 "experiencing high demand" often enough that a
+  // single attempt shows the user a broken app for something that clears in
+  // seconds. Retried here rather than surfaced, because nothing upstream can
+  // do anything useful with it.
+  const MAX_ATTEMPTS = 4;
+  let response;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    response = await fetch(`${BASE}/${model}:streamGenerateContent?alt=sse`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-goog-api-key": process.env.GEMINI_API_KEY,
+      },
+      body,
+    });
+
+    if (response.ok) break;
+
     const detail = await response.text();
-    throw new Error(`Gemini generation failed: ${response.status} ${detail.slice(0, 300)}`);
+    const transient = response.status === 429 || response.status >= 500;
+
+    if (!transient || attempt === MAX_ATTEMPTS) {
+      throw new Error(`Gemini generation failed: ${response.status} ${detail.slice(0, 300)}`);
+    }
+
+    await sleep(1000 * 2 ** (attempt - 1));
   }
 
   const reader = response.body.getReader();
@@ -93,10 +121,16 @@ export async function* streamGemini({ model, system, messages, maxTokens }) {
         // Thinking models emit parts with no text (and a thoughtSignature)
         // alongside the answer; joining them is harmless, but a part without
         // text must not be treated as the answer ending.
-        const text = parsed.candidates?.[0]?.content?.parts
-          ?.map((part) => part.text ?? "")
-          .join("");
+        const candidate = parsed.candidates?.[0];
+
+        const text = candidate?.content?.parts?.map((part) => part.text ?? "").join("");
         if (text) yield text;
+
+        // A truncated answer is worse than a short one, because it reads as
+        // complete until the last line. Say so rather than let it pass.
+        if (candidate?.finishReason === "MAX_TOKENS") {
+          yield "\n\n_(This answer was cut short by the output limit.)_";
+        }
       } catch {
         // A line that does not parse is a partial write; the next read
         // completes it.
