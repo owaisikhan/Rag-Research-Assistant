@@ -19,6 +19,18 @@ import { useToast } from "../ui/Toaster";
  * every passage has to be embedded. A control that looks idle during that is a
  * control people click twice.
  */
+/**
+ * A label that says which pass it is on, not just that something is happening.
+ *
+ * A long document takes minutes, and an unchanging "indexing…" for three
+ * minutes is indistinguishable from a hang.
+ */
+function indexingLabel(progress) {
+  if (!progress) return "Reading and indexing your PDF…";
+  const pct = Math.round((progress.done / Math.max(1, progress.total)) * 100);
+  return `Indexing ${progress.done} of ${progress.total} passages (${pct}%)…`;
+}
+
 export default function UploadPanel({
   documents,
   onChange,
@@ -30,6 +42,8 @@ export default function UploadPanel({
 }) {
   const notify = useToast();
   const [isUploading, setIsUploading] = useState(false);
+  // What to narrate while a long document is indexed across several passes.
+  const [progress, setProgress] = useState(null);
   const [error, setError] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef(null);
@@ -65,16 +79,59 @@ export default function UploadPanel({
 
       if (!result.ok) {
         setError(result.message ?? "That upload did not work.");
-      } else {
-        await onChange();
-        notify("Document indexed — ask it anything.", { tone: "success" });
+        return;
       }
+
+      // A long document comes back still indexing. Embedding is paced by the
+      // provider, so it cannot finish inside one request however long that
+      // request is allowed to run -- the file is uploaded once and the work
+      // continues across further passes.
+      if (result.indexing) {
+        const total = result.document.chunkCount;
+        await finishIndexing(result.document.id, total);
+      }
+
+      await onChange();
+      notify("Document indexed — ask it anything.", { tone: "success" });
     } catch {
       setError("The upload failed. Please try again.");
     } finally {
       setIsUploading(false);
+      setProgress(null);
       if (inputRef.current) inputRef.current.value = "";
     }
+  }
+
+  /**
+   * Drive the remaining passes until the document is searchable.
+   *
+   * Bounded rather than while(true): a bug that never reduces `remaining`
+   * would otherwise hammer a metered API forever. The ceiling is generous
+   * enough for the largest document the daily allowance can index at all.
+   */
+  async function finishIndexing(documentId, total) {
+    const MAX_PASSES = 20;
+
+    for (let pass = 0; pass < MAX_PASSES; pass++) {
+      const response = await fetch("/api/upload/continue", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ documentId }),
+      });
+
+      const result = await response.json();
+
+      if (!result.ok) {
+        setError(result.message ?? "Indexing stopped part-way.");
+        return;
+      }
+
+      setProgress({ done: result.embedded ?? 0, total: result.total ?? total });
+
+      if (!result.indexing) return;
+    }
+
+    setError("Indexing is taking longer than expected. Try uploading again to carry on.");
   }
 
   async function remove(id, title) {
@@ -117,7 +174,7 @@ export default function UploadPanel({
           }`}
         >
           {isUploading ? (
-            <Spinner label="Reading and indexing your PDF…" />
+            <Spinner label={indexingLabel(progress)} />
           ) : (
             <>
               <label
@@ -211,7 +268,7 @@ export default function UploadPanel({
 
             {isUploading ? (
               <li className="bg-surface-raised px-3.5 py-3">
-                <Spinner label="Reading and indexing your PDF…" />
+                <Spinner label={indexingLabel(progress)} />
               </li>
             ) : (
               <li className="bg-surface-raised px-3.5 py-2">

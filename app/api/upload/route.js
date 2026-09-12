@@ -15,7 +15,8 @@ import { embedDocuments, EMBEDDING_MODEL } from "@/app/_lib/rag/embed";
 import { createClient } from "@/app/_lib/supabase-server";
 import { ensureSessionId } from "@/app/_lib/session";
 import { checkRateLimit, refundRateLimit } from "@/app/_lib/rag/limits";
-import { recordUsage } from "@/app/_lib/rag/usage";
+import { recordUsage, DAILY_LIMITS } from "@/app/_lib/rag/usage";
+import { runIndexPass, passagesPerPass } from "@/app/_lib/rag/index-pass";
 
 export const runtime = "nodejs";
 
@@ -72,6 +73,10 @@ const EMBED_SHARE = 0.66;
 // production.
 const MAX_MB = Number(process.env.UPLOAD_MAX_MB || 60);
 const MAX_BYTES = MAX_MB * 1024 * 1024;
+
+// The provider's daily ceiling. A document needing more passages than this can
+// never finish, however many passes it is given.
+const DAILY_EMBED_LIMIT = DAILY_LIMITS.embedding;
 // Chunks are inserted in batches for the same reason as the ingestion script:
 // each row carries a 1536-float embedding, so a large batch becomes a
 // multi-megabyte request that fails for long documents only.
@@ -147,25 +152,25 @@ export async function POST(request) {
     );
   }
 
-  // Refuse BEFORE spending any quota.
-  //
-  // Extraction and chunking are local and free, so at this point the exact
-  // cost of the document is known rather than estimated from its page count --
-  // and pages are a poor proxy, ranging from 1.5 to 4.25 chunks each across
-  // the corpus. Checking here turns a request that would have died at the
-  // platform's timeout, halfway through, leaving a half-indexed document
-  // behind, into an immediate sentence explaining what will fit.
-  const embedSeconds = (chunks.length / EMBED_RPM) * 60;
-  const allowedSeconds = TIME_BUDGET_S * EMBED_SHARE;
+  // How many passages one request can embed. Embedding is paced by the
+  // provider, so this is a time calculation rather than a memory one.
+  const perPass = passagesPerPass({
+    budgetSeconds: TIME_BUDGET_S,
+    embedRpm: EMBED_RPM,
+    embedShare: EMBED_SHARE,
+  });
 
-  if (embedSeconds > allowedSeconds) {
-    const fits = Math.floor((allowedSeconds / 60) * EMBED_RPM);
-    const roughPages = Math.max(1, Math.floor(pageCount * (fits / chunks.length)));
+  // A document larger than one pass is no longer refused -- it is indexed
+  // across several. What IS still refused is a document larger than the
+  // provider's whole daily allowance, because no number of passes can finish
+  // it and a visitor should learn that now rather than after watching a
+  // progress bar climb for ten minutes.
+  if (chunks.length > DAILY_EMBED_LIMIT) {
+    const roughPages = Math.max(1, Math.floor(pageCount * (DAILY_EMBED_LIMIT / chunks.length)));
 
     return refundAndFail(
-      `That document needs ${chunks.length} passages indexed, which takes about ` +
-        `${Math.round(embedSeconds)}s — longer than this deployment can spend on one ` +
-        `upload (${Math.round(allowedSeconds)}s). Try a document of roughly ` +
+      `That document needs ${chunks.length} passages indexed, more than the ` +
+        `${DAILY_EMBED_LIMIT} this demo can index in a day. Try a document of roughly ` +
         `${roughPages} pages or fewer, or split this one.`,
       413
     );
@@ -203,35 +208,50 @@ export async function POST(request) {
   }
 
   try {
-    const embeddings = await embedDocuments(chunks.map((chunk) => chunk.content));
-
-    // EACH TEXT is one request against the daily quota, not each HTTP call --
-    // which is why a 100-page upload can cost 200+ of the free tier's 1000
-    // while looking like a handful of network requests in a trace. Recorded
-    // after the call, so a failure part-way does not log work never done.
-    await recordUsage({ kind: "embedding", units: chunks.length });
-
-    if (embeddings.length !== chunks.length) {
-      throw new Error("The embedding service returned the wrong number of vectors.");
-    }
-
-    const rows = chunks.map((chunk, index) => ({
+    // Every passage is stored FIRST, without an embedding. Extraction and
+    // chunking are local and free, so this costs nothing and means a later
+    // pass has something to resume from -- the document is fully present in
+    // the database and only its vectors are missing.
+    const rows = chunks.map((chunk) => ({
       chunk_index: chunk.chunkIndex,
       content: chunk.content,
       token_count: chunk.tokenCount,
       section: chunk.section,
       page_start: chunk.pageStart,
       page_end: chunk.pageEnd,
-      embedding: JSON.stringify(embeddings[index]),
     }));
 
     for (let i = 0; i < rows.length; i += INSERT_BATCH) {
-      const { error } = await supabase.rpc("add_upload_chunks", {
+      const { error } = await supabase.rpc("add_upload_chunks_unembedded", {
         p_session: sessionId,
         p_document: documentId,
         p_chunks: rows.slice(i, i + INSERT_BATCH),
       });
       if (error) throw new Error(error.message);
+    }
+
+    const { remaining } = await runIndexPass({
+      supabase,
+      sessionId,
+      documentId,
+      limit: perPass,
+    });
+
+    // Still passages to embed: the document stays `pending:` -- and therefore
+    // unsearchable -- until the browser comes back for the next pass.
+    if (remaining > 0) {
+      return Response.json({
+        ok: true,
+        indexing: true,
+        document: {
+          id: documentId,
+          title,
+          fileName: file.name,
+          pageCount,
+          chunkCount: chunks.length,
+          remaining,
+        },
+      });
     }
 
     const { data: stored, error: finishError } = await supabase.rpc("finish_upload", {

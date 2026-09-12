@@ -202,6 +202,37 @@ limit rather than the daily one: 100 requests/minute means a 100-page document
 takes about two minutes of wall time. Enabling billing removes that pacing, at
 roughly four cents per 100-page document.
 
+### Long documents are indexed across several requests
+
+Embedding is paced by the provider, so a long document cannot be indexed inside
+one request's duration however generous that duration is. It used to be refused
+outright, with a sentence naming what would fit — honest, but not useful when
+the answer is "your document".
+
+The file is now uploaded **once**. Extraction and chunking are local and free,
+so every passage is stored on the first request with no embedding; each pass
+then embeds as many as its budget allows, and the browser comes back until
+there are none left. The document keeps its `pending:` hash throughout.
+
+That sentinel is what makes this safe, and it was built for timeouts rather
+than for this — it works unchanged. Verified on a deliberately half-indexed
+document: 25 passages present, 10 embedded, and retrieval returns **zero** from
+it even when queried with one of its own embeddings. It is also absent from the
+visitor's own document list until it is complete.
+
+Also verified end to end with the budget forced down to 10 seconds, so a
+46-passage document took five passes: `36 → 26 → 16 → 6 → 0 remaining`, then
+finished and became searchable.
+
+The browser's loop is bounded at 20 passes rather than `while (true)`. A bug
+that failed to reduce `remaining` would otherwise hammer a metered API forever.
+
+**This does not change the daily allowance.** A 450-page document is about 985
+passages however many requests deliver them, against a free-tier ceiling of
+1,000 a day. What splitting removes is the per-request wall, not the per-day
+one — so an upload needing more than a whole day's allowance is still refused
+immediately, now with that as the stated reason.
+
 ### What 300 seconds actually buys
 
 Confirming fluid compute and setting `UPLOAD_TIME_BUDGET_S=300` does not lift
