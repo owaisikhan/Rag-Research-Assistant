@@ -254,6 +254,15 @@ export default function UploadPanel({
                         {document.pageCount} pages · {document.chunkCount} passages
                       </p>
 
+                      {/* Listed, but honest about not being usable yet. It
+                          holds one of the three slots either way, so hiding it
+                          only made the limit message look like a lie. */}
+                      {document.isComplete === false && (
+                        <p className="mt-1.5 inline-block rounded bg-surface-sunken px-1.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-ink-muted">
+                          Not indexed — {document.embedded ?? 0} of {document.chunkCount} done
+                        </p>
+                      )}
+
                       {/* A word, not just the accent stripe: which document an
                           answer came from must not be something a reader has to
                           infer from a hue. */}
@@ -272,7 +281,7 @@ export default function UploadPanel({
                     <button
                       type="button"
                       onClick={() => onSummarise?.(document)}
-                      disabled={isBusy}
+                      disabled={isBusy || document.isComplete === false}
                       className="rounded-lg px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary-soft disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       Summarise

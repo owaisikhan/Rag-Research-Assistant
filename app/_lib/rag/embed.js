@@ -13,6 +13,7 @@
 import OpenAI from "openai";
 
 import { createRateWindow } from "./rate-window.js";
+import { estimateTokens, fitBatch } from "./pass-size.js";
 
 const PROVIDERS = {
   // Gemini lets you ASK for a dimensionality, so it is pinned to 1536 to match
@@ -118,6 +119,28 @@ const WINDOW_MS = 60_000;
 
 const geminiWindow = createRateWindow({ limit: GEMINI_LIMIT_PER_MINUTE, windowMs: WINDOW_MS });
 
+// TOKENS per minute, which is a SEPARATE ceiling from requests per minute and
+// the one that actually bites.
+//
+// Measured from the provider's own console: the embedding model allows 100
+// requests a minute and 30,000 TOKENS a minute. A batch of 95 passages at ~700
+// tokens each is ~66,000 tokens -- comfortably inside the request limit and
+// more than double the token limit. It is rejected on the first attempt, every
+// attempt, and no amount of backing off helps because the retry re-sends the
+// same oversized batch. Pacing requests while ignoring tokens meant the app
+// could not see the wall it kept walking into.
+const GEMINI_TOKENS_PER_MINUTE = Number(process.env.GEMINI_EMBED_TPM || 30000);
+
+const geminiTokenWindow = createRateWindow({
+  limit: GEMINI_TOKENS_PER_MINUTE,
+  windowMs: WINDOW_MS,
+  // A token budget must never tighten to something smaller than one passage,
+  // or nothing would ever be sendable again.
+  minLimit: 2000,
+});
+
+
+
 /**
  * Gemini's free tier enforces TWO quotas, and they need opposite responses:
  *
@@ -167,6 +190,34 @@ function retryDelayFrom(payload) {
 }
 
 async function embedWithGemini(texts, taskType) {
+  const out = [];
+
+  // Sent in sub-batches no larger than the rate the window currently believes
+  // is allowed, recomputed each time round because a 429 lowers it.
+  //
+  // This used to be one request carrying every passage. That is fine when the
+  // configured rate matches the account and catastrophic when it does not: a
+  // batch of 95 against an account allowed fewer is rejected on the FIRST
+  // attempt, and every retry re-sends the same oversized batch and is rejected
+  // identically. The backoff was treating "too big for your tier" as though it
+  // were "busy, try later".
+  for (let i = 0; i < texts.length; ) {
+    // Bounded by BOTH ceilings: how many requests the window believes are
+    // allowed, and how many tokens fit in a minute's budget. Whichever runs
+    // out first decides the batch.
+    const size = fitBatch(texts.slice(i), {
+      maxCount: geminiWindow.limitNow(),
+      maxTokens: geminiTokenWindow.limitNow(),
+    });
+
+    out.push(...(await embedGeminiBatch(texts.slice(i, i + size), taskType)));
+    i += size;
+  }
+
+  return out;
+}
+
+async function embedGeminiBatch(texts, taskType) {
   const body = {
     requests: texts.map((text) => ({
       model: `models/${EMBEDDING_MODEL}`,
@@ -182,8 +233,12 @@ async function embedWithGemini(texts, taskType) {
   // backed-off retries turn a failed overnight ingestion into a slow one.
   const MAX_ATTEMPTS = 8;
 
+  const tokens = texts.reduce((sum, text) => sum + estimateTokens(text), 0);
+
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    // Both windows, because the provider enforces both.
     await geminiWindow.reserve(texts.length);
+    await geminiTokenWindow.reserve(tokens);
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${EMBEDDING_MODEL}:batchEmbedContents`,
@@ -229,8 +284,23 @@ async function embedWithGemini(texts, taskType) {
       throw new Error(`Gemini embeddings failed: ${response.status} ${detail.slice(0, 300)}`);
     }
 
-    // Google states the wait in the error; an exponential guess is usually
-    // far too short (it asks for ~38s, the guess starts at 2s).
+    // A per-minute 429 says the configured rate is wrong for this account, so
+    // believe the provider and halve it. Waiting alone would re-send the same
+    // oversized batch and fail the same way; the next attempt will be smaller.
+    if (response.status === 429) {
+      // Which ceiling was hit is not always stated, so both are lowered.
+      // Overshooting downwards costs a slower run; not lowering the one that
+      // actually bit costs an infinite retry loop.
+      const perMinute = geminiWindow.tighten();
+      const perToken = geminiTokenWindow.tighten();
+      console.warn(
+        `  Gemini rate is lower than configured; now assuming ` +
+          `${perMinute} requests/min and ${perToken} tokens/min`
+      );
+    }
+
+    // Google states the wait in the error; an exponential guess is usually far
+    // too short (it asks for ~38s, the guess starts at 2s).
     const wait = retryDelayFrom(detail) ?? 2000 * 2 ** (attempt - 1);
     console.warn(
       `  Gemini ${response.status}; waiting ${Math.round(wait / 1000)}s (attempt ${attempt}/${MAX_ATTEMPTS - 1})`
@@ -279,14 +349,26 @@ export async function embedQuery(text) {
  * wait is billed, invisible to whoever is watching a progress bar, and counts
  * against the function's duration limit.
  */
-export function embedCapacity() {
+export function embedCapacity({ tokensNeeded = 1 } = {}) {
   if (config.provider !== "gemini") {
     // Other providers are not paced locally, so there is never a wait to report.
-    return { available: Number.MAX_SAFE_INTEGER, msUntilAvailable: 0 };
+    return {
+      available: Number.MAX_SAFE_INTEGER,
+      availableTokens: Number.MAX_SAFE_INTEGER,
+      msUntilAvailable: 0,
+    };
   }
 
   return {
     available: geminiWindow.available(),
-    msUntilAvailable: geminiWindow.msUntilAvailable(),
+    availableTokens: geminiTokenWindow.available(),
+    // The longer of the two waits: capacity in one window is no use without
+    // capacity in the other.
+    // The longer of the two waits, each asked for what is actually needed:
+    // one passage's worth of request budget, and its tokens.
+    msUntilAvailable: Math.max(
+      geminiWindow.msUntilAvailable(1),
+      geminiTokenWindow.msUntilAvailable(tokensNeeded)
+    ),
   };
 }

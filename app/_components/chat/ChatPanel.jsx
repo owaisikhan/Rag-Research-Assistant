@@ -186,7 +186,7 @@ export default function ChatPanel() {
     const trimmed = question.trim();
     if (trimmed === "" || isStreaming) return;
 
-    if (documents.length === 0) {
+    if (readyDocuments.length === 0) {
       notify("Upload a PDF first — answers come only from your own documents.");
       return;
     }
@@ -244,6 +244,10 @@ export default function ChatPanel() {
   }
 
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+  // Only a fully indexed document can answer anything, so the conversation is
+  // gated on those rather than on the row count -- an upload still indexing is
+  // listed, but it cannot be asked about yet.
+  const readyDocuments = documents.filter((d) => d.isComplete !== false);
   const hasDocuments = documents.length > 0;
   const isEmpty = messages.length === 0;
 
@@ -328,8 +332,8 @@ export default function ChatPanel() {
             {isEmpty && (
               <p className="text-sm text-ink-muted">
                 Ask anything about your{" "}
-                {documents.length === 1 ? "document" : "documents"}. Answers come
-                only from what is in {documents.length === 1 ? "it" : "them"}.
+                {readyDocuments.length === 1 ? "document" : "documents"}. Answers come
+                only from what is in {readyDocuments.length === 1 ? "it" : "them"}.
               </p>
             )}
 

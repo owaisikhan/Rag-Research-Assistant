@@ -491,6 +491,30 @@ time while this rolls over at UTC midnight. It is for seeing the shape of
 consumption, not for gating on. Set `GEMINI_GEN_DAILY_LIMIT` to show the
 answers row against a denominator too.
 
+## The provider enforces two ceilings, not one
+
+Embedding is limited per minute by **requests** AND by **tokens**, and the
+token one binds first. Read from the provider's own console: 100 requests a
+minute, 30,000 tokens a minute, 1,000 requests a day.
+
+A batch of 95 passages at ~480 tokens each is ~46,000 tokens. Comfortably
+inside the request limit, 53% over the token limit — rejected on the first
+attempt, every attempt, and no amount of backing off helps because each retry
+re-sends the same oversized batch. Pacing requests while ignoring tokens meant
+the app could not see the wall it kept walking into.
+
+Batches are now sized against both, and a pass that has requests to spare but
+no token budget reports how long to wait rather than proceeding with a
+one-passage batch and blocking inside the call.
+
+The window also **halves its own belief** on any per-minute 429. Free-tier
+numbers vary by account and model and are not discoverable from the API, so a
+configured rate is a guess either way — one that corrects itself is a better
+guess. It never climbs back, because a limit that recovers optimistically walks
+into the same wall on the next document.
+
+`GEMINI_EMBED_RPM` and `GEMINI_EMBED_TPM` set the starting beliefs.
+
 ## Rate limiting
 
 Twelve questions per hour per caller, counted in Postgres rather than in

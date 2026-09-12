@@ -155,3 +155,61 @@ test("a short block costs exactly the short block", async () => {
   assert.ok(waited >= 2_000, `must honour the block, waited ${waited}ms`);
   assert.ok(waited < 10_000, `must not add a window roll on top, waited ${waited}ms`);
 });
+
+test("tighten() halves the believed rate and never climbs back", async () => {
+  // A 429 on the first attempt means the request asked for more than the
+  // account allows. Waiting cannot fix that; sending less can.
+  const clock = fakeClock();
+  const window = createRateWindow({ limit: 96, now: clock.now, sleep: clock.sleep });
+
+  assert.equal(window.limitNow(), 96);
+  assert.equal(window.tighten(), 48);
+  assert.equal(window.tighten(), 24);
+  assert.equal(window.tighten(), 12);
+
+  // Rolling the window forward must not restore optimism: a limit that
+  // recovers on its own walks into the same wall on the next document.
+  clock.advance(600_000);
+  assert.equal(window.limitNow(), 12);
+});
+
+test("tighten() stops at the floor rather than reaching zero", () => {
+  const window = createRateWindow({ limit: 4, now: () => 0, sleep: async () => {} });
+  for (let i = 0; i < 20; i++) window.tighten();
+  assert.equal(window.limitNow(), 1, "a rate of zero would never send anything again");
+});
+
+test("a tightened window admits less", async () => {
+  const clock = fakeClock();
+  const window = createRateWindow({ limit: 100, now: clock.now, sleep: clock.sleep });
+
+  assert.equal(window.available(), 100);
+  window.tighten();
+  assert.equal(window.available(), 50);
+});
+
+test("msUntilAvailable(count) answers for the amount actually needed", async () => {
+  // The spin this pins down: with 200 slots left and 500 needed, asking only
+  // "is it full?" answered "no wait" -- so the caller returned, came straight
+  // back, and span without ever making progress.
+  const clock = fakeClock();
+  const window = createRateWindow({ limit: 1000, now: clock.now, sleep: clock.sleep });
+
+  await window.reserve(800);
+
+  assert.equal(window.msUntilAvailable(100), 0, "100 fits in the 200 left");
+  assert.ok(window.msUntilAvailable(500) > 0, "500 does not fit and must report a wait");
+});
+
+test("the reported wait is when enough room frees, not when the window empties", async () => {
+  const clock = fakeClock();
+  const window = createRateWindow({ limit: 10, now: clock.now, sleep: clock.sleep });
+
+  await window.reserve(4);
+  clock.advance(10_000);
+  await window.reserve(6);
+
+  // Full. Needing 2 means waiting for the first batch's entries to expire,
+  // which happens 60s after they were taken -- 50s from now, not 60.
+  assert.equal(window.msUntilAvailable(2), 50_000);
+});

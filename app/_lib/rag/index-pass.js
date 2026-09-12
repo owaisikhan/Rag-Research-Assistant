@@ -1,6 +1,7 @@
 import "server-only";
 
 import { embedDocuments, embedCapacity } from "./embed.js";
+import { fitBatch, estimateTokens } from "./pass-size.js";
 import { recordUsage } from "./usage.js";
 
 // Re-exported so callers have one import for "run a pass" and "how big".
@@ -34,16 +35,32 @@ export async function runIndexPass({ supabase, sessionId, documentId, limit }) {
   // Take only what the provider's window allows RIGHT NOW. Waiting for more
   // would block this request invisibly, and the pass is sized so that a full
   // window is not needed for it in the first place.
-  const capacity = embedCapacity();
+  // BOTH ceilings decide whether a pass can do anything at all. Checking only
+  // the request count meant a pass with requests to spare but no token budget
+  // still went ahead with a one-passage batch, and then blocked inside the
+  // embedding call waiting for tokens -- 45 seconds, inside the request, with
+  // nothing on screen. Tokens are the ceiling that actually binds here.
+  const needed = estimateTokens(pendingRows[0].content);
+  const capacity = embedCapacity({ tokensNeeded: needed });
 
-  if (capacity.available === 0) {
+  if (capacity.available === 0 || capacity.availableTokens < needed) {
     const progress = await readProgress({ supabase, sessionId, documentId });
     // Told to come back rather than made to wait. The browser can say what it
     // is waiting for, which "nothing is happening" cannot.
     return { ...progress, waitMs: capacity.msUntilAvailable };
   }
 
-  const batch = pendingRows.slice(0, capacity.available);
+  // Sized by BOTH ceilings. Sizing by request count alone let a pass take more
+  // passages than the minute's token budget, and embedDocuments then blocked
+  // mid-pass waiting for the token window -- inside the request, invisibly,
+  // which is the exact thing passes exist to avoid.
+  const batch = pendingRows.slice(
+    0,
+    fitBatch(pendingRows.map((row) => row.content), {
+      maxCount: Math.min(capacity.available, limit),
+      maxTokens: capacity.availableTokens,
+    })
+  );
 
   const vectors = await embedDocuments(batch.map((row) => row.content));
 

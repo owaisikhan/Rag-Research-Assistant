@@ -28,6 +28,11 @@ export async function GET() {
       fileName: row.file_name,
       pageCount: row.page_count,
       chunkCount: row.chunk_count,
+      embedded: row.embedded,
+      // An incomplete upload is listed now rather than hidden. It counts
+      // against the per-session limit, so concealing it produced "you have
+      // reached the limit of 3" next to a list of two.
+      isComplete: row.is_complete,
       expiresAt: row.expires_at,
     })),
   });

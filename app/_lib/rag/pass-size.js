@@ -23,3 +23,44 @@ export function passagesPerPass({ budgetSeconds, embedRpm, embedShare, maxPassSe
   // browser would loop until its own ceiling stopped it.
   return Math.max(1, Math.floor((seconds / 60) * embedRpm));
 }
+
+/**
+ * Tokens in a string, near enough to budget with.
+ *
+ * Roughly 3.5 characters per token for English prose. Deliberately a little
+ * PESSIMISTIC: overestimating costs a smaller batch, underestimating costs a
+ * 429 that no amount of retrying can clear, because the retry re-sends the
+ * same oversized request.
+ */
+export function estimateTokens(text) {
+  return Math.ceil(String(text).length / 3.5);
+}
+
+/**
+ * How many of these passages fit in one request.
+ *
+ * Both ceilings matter and they are enforced separately by the provider: a
+ * request count per minute, and a TOKEN count per minute. Sizing by count
+ * alone is what let a 96-passage batch of 46,000 tokens go out against a
+ * 30,000 token ceiling -- rejected on the first attempt, every attempt.
+ *
+ * Always returns at least one, even when a single passage exceeds the whole
+ * token budget. Refusing it would strand the document, and the provider will
+ * say so itself if it really is too large.
+ */
+export function fitBatch(contents, { maxCount, maxTokens }) {
+  let count = 0;
+  let tokens = 0;
+
+  for (const content of contents) {
+    if (count >= maxCount) break;
+
+    const next = estimateTokens(content);
+    if (count > 0 && tokens + next > maxTokens) break;
+
+    tokens += next;
+    count += 1;
+  }
+
+  return Math.max(1, count);
+}
