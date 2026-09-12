@@ -49,9 +49,10 @@ const EMBED_PACING_MS = 0;
 const INSERT_BATCH = 50;
 
 function parseArgs(argv) {
-  const args = { dir: "corpus", force: false };
+  const args = { dir: "corpus", force: false, dryRun: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--force") args.force = true;
+    else if (argv[i] === "--dry-run") args.dryRun = true;
     else if (argv[i] === "--dir") args.dir = argv[++i];
   }
   return args;
@@ -279,6 +280,45 @@ async function main() {
   }
 
   const manifest = await loadManifest(dir);
+
+  // Extraction and chunking are local and free; only embedding costs quota.
+  // So the bill can be known exactly before any of it is spent -- which
+  // matters on a metered free tier where one long document can consume a
+  // whole day's allowance.
+  if (args.dryRun) {
+    console.log(`Dry run: ${files.length} PDFs in ${dir}\n`);
+
+    let total = 0;
+    for (const fileName of files) {
+      try {
+        const { pages, pageCount } = await extractPdf(join(dir, fileName));
+        const chunks = chunkPages(pages);
+        total += chunks.length;
+        console.log(
+          `  ${String(pageCount).padStart(4)} pages  ` +
+            `${String(chunks.length).padStart(5)} chunks   ${fileName}`
+        );
+      } catch (error) {
+        console.log(`     ?  pages      ? chunks   ${fileName} -- ${error.message}`);
+      }
+    }
+
+    console.log(
+      `\n  ${total} embedding requests needed ` +
+        `(each chunk counts as one).\n` +
+        `  Gemini free tier allows 1000 per day, 100 per minute.\n` +
+        `  Estimated wall time at the per-minute limit: ${Math.ceil(total / 95)} minutes.`
+    );
+    if (total > 1000) {
+      console.log(
+        `\n  This exceeds one day's free allowance. Ingest in batches across\n` +
+          `  days, enable billing, or drop the largest documents.`
+      );
+    }
+    console.log("");
+    return;
+  }
+
   console.log(
     `Ingesting ${files.length} PDFs from ${dir}\n` +
       `Embedding model: ${EMBEDDING_MODEL}${args.force ? " (forced re-ingest)" : ""}\n`

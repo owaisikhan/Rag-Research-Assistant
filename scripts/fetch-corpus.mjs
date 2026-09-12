@@ -99,6 +99,35 @@ async function download(url, destination) {
   return bytes.length;
 }
 
+/**
+ * Reorder so consecutive picks come from different sources.
+ *
+ * Non-academic documents (standards, reports) are seeded first: they have a
+ * completely different shape on the page from a paper, so a small corpus that
+ * includes them demonstrates far more than one that does not.
+ */
+function interleave(entries) {
+  const byKind = new Map();
+  for (const entry of entries) {
+    const key = entry.sourceId.split(":")[0] + ":" + entry.kind;
+    if (!byKind.has(key)) byKind.set(key, []);
+    byKind.get(key).push(entry);
+  }
+
+  // Anything that is not an arXiv paper goes first.
+  const groups = [...byKind.entries()]
+    .sort(([a], [b]) => Number(a.startsWith("arxiv")) - Number(b.startsWith("arxiv")))
+    .map(([, group]) => group);
+
+  const ordered = [];
+  for (let round = 0; ordered.length < entries.length; round++) {
+    for (const group of groups) {
+      if (round < group.length) ordered.push(group[round]);
+    }
+  }
+  return ordered;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const dir = resolve(args.dir);
@@ -135,7 +164,11 @@ async function main() {
   }
   console.log(`  ${String((sources.direct ?? []).length).padStart(3)} direct documents (standards, reports)\n`);
 
-  const targets = wanted.slice(0, args.limit);
+  // Take a limited corpus ROUND-ROBIN across sources, not off the front of the
+  // list. The list is grouped by source, so slicing the first N gives N
+  // documents from one arXiv category -- a "mixed corpus" that is entirely
+  // one subject, which is the opposite of what the demo is meant to show.
+  const targets = interleave(wanted).slice(0, args.limit);
   const onDisk = new Set(await readdir(dir).catch(() => []));
 
   console.log(`Downloading ${targets.length} documents into ${dir}\n`);

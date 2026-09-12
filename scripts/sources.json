@@ -6,24 +6,66 @@
     "reports) which have a completely different shape on the page.",
     "",
     "Everything here is open access or public domain. Add or remove freely --",
-    "this file is the only thing that decides what the demo knows."
+    "this file is the only thing that decides what the demo knows.",
+    "",
+    "`excluded` documents nothing -- it is a note to a future reader about",
+    "documents deliberately left out and why. Run the ingest dry run before",
+    "adding a long document; a 500-page standard can cost a whole day."
   ],
-
   "arxiv": [
-    { "category": "cs.CR", "count": 60, "kind": "paper", "label": "security and cryptography" },
-    { "category": "cs.LG", "count": 60, "kind": "paper", "label": "machine learning" },
-    { "category": "cs.SE", "count": 40, "kind": "paper", "label": "software engineering" },
-    { "category": "q-bio.NC", "count": 40, "kind": "paper", "label": "neuroscience" },
-    { "category": "econ.GN", "count": 40, "kind": "paper", "label": "economics" },
-    { "category": "astro-ph.EP", "count": 30, "kind": "paper", "label": "planetary science" },
-    { "category": "stat.AP", "count": 30, "kind": "paper", "label": "applied statistics" }
+    {
+      "category": "cs.CR",
+      "count": 60,
+      "kind": "paper",
+      "label": "security and cryptography"
+    },
+    {
+      "category": "cs.LG",
+      "count": 60,
+      "kind": "paper",
+      "label": "machine learning"
+    },
+    {
+      "category": "cs.SE",
+      "count": 40,
+      "kind": "paper",
+      "label": "software engineering"
+    },
+    {
+      "category": "q-bio.NC",
+      "count": 40,
+      "kind": "paper",
+      "label": "neuroscience"
+    },
+    {
+      "category": "econ.GN",
+      "count": 40,
+      "kind": "paper",
+      "label": "economics"
+    },
+    {
+      "category": "astro-ph.EP",
+      "count": 30,
+      "kind": "paper",
+      "label": "planetary science"
+    },
+    {
+      "category": "stat.AP",
+      "count": 30,
+      "kind": "paper",
+      "label": "applied statistics"
+    }
   ],
-
   "direct": [
     {
       "sourceId": "nist:sp800-207",
       "title": "Zero Trust Architecture (NIST SP 800-207)",
-      "authors": ["Scott Rose", "Oliver Borchert", "Stu Mitchell", "Sean Connelly"],
+      "authors": [
+        "Scott Rose",
+        "Oliver Borchert",
+        "Stu Mitchell",
+        "Sean Connelly"
+      ],
       "url": "https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-207.pdf",
       "kind": "standard",
       "licence": "Public domain (US Government work)",
@@ -32,7 +74,12 @@
     {
       "sourceId": "nist:sp800-61r2",
       "title": "Computer Security Incident Handling Guide (NIST SP 800-61 Rev. 2)",
-      "authors": ["Paul Cichonski", "Tom Millar", "Tim Grance", "Karen Scarfone"],
+      "authors": [
+        "Paul Cichonski",
+        "Tom Millar",
+        "Tim Grance",
+        "Karen Scarfone"
+      ],
       "url": "https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-61r2.pdf",
       "kind": "standard",
       "licence": "Public domain (US Government work)",
@@ -41,20 +88,21 @@
     {
       "sourceId": "nist:ai-100-1",
       "title": "Artificial Intelligence Risk Management Framework (AI RMF 1.0)",
-      "authors": ["National Institute of Standards and Technology"],
+      "authors": [
+        "National Institute of Standards and Technology"
+      ],
       "url": "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf",
       "kind": "standard",
       "licence": "Public domain (US Government work)",
       "publishedOn": "2023-01-01"
-    },
+    }
+  ],
+  "excluded": [
     {
       "sourceId": "nist:sp800-53r5",
       "title": "Security and Privacy Controls for Information Systems (NIST SP 800-53 Rev. 5)",
-      "authors": ["Joint Task Force"],
       "url": "https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-53r5.pdf",
-      "kind": "standard",
-      "licence": "Public domain (US Government work)",
-      "publishedOn": "2020-09-01"
+      "why": "492 pages, 794 chunks -- 79% of Gemini's 1000/day free allowance for one document. Re-add it if you enable billing; `npm run corpus:ingest -- --dry-run` will tell you the cost of anything you add."
     }
   ]
 }
