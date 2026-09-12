@@ -8,12 +8,16 @@ import Callout from "../ui/Callout";
 import { useToast } from "../ui/Toaster";
 
 /**
- * Upload a PDF and see it become searchable.
+ * Upload a PDF, and list what is uploaded.
  *
- * The state that matters here is the slow one: indexing a PDF takes seconds,
- * not milliseconds, because every passage has to be embedded. A control that
- * looks idle during that is a control people click twice, so the drop zone is
- * replaced by a narrated spinner while it works.
+ * Two shapes, because the same component serves two moments. With nothing
+ * uploaded this IS the page -- a drop target the size of the decision it is
+ * asking for. Once there is a document it collapses to a compact strip, since
+ * from then on the conversation is the point and this is reference.
+ *
+ * The state that matters is the slow one: indexing takes seconds, because
+ * every passage has to be embedded. A control that looks idle during that is a
+ * control people click twice.
  */
 export default function UploadPanel({
   documents,
@@ -35,9 +39,9 @@ export default function UploadPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // The composer's + button picks the file but this component owns uploading,
-  // so the file is handed across rather than duplicating the upload logic in
-  // two places.
+  // The composer's attach button picks the file but this component owns
+  // uploading, so the file is handed across rather than duplicating the upload
+  // logic in two places.
   useEffect(() => {
     if (!incomingFile) return;
     upload(incomingFile);
@@ -82,56 +86,58 @@ export default function UploadPanel({
     notify(`Removed ${title}.`, { tone: "success" });
   }
 
-  return (
-    <section className="mb-6">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
-        Your documents
-      </h2>
+  const hasDocuments = documents.length > 0;
 
-      <div
-        onDragOver={(event) => {
-          event.preventDefault();
-          setIsDragging(true);
-        }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={(event) => {
-          event.preventDefault();
-          setIsDragging(false);
-          upload(event.dataTransfer.files?.[0]);
-        }}
-        className={`mt-3 rounded-xl border border-dashed p-4 text-center transition-colors ${
-          isDragging
-            ? "border-primary bg-primary-soft"
-            : "border-border-strong bg-surface-raised"
-        }`}
-      >
-        {isUploading ? (
-          <Spinner label="Reading and indexing your PDF…" />
-        ) : (
-          <>
-            <span className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-primary-soft text-primary">
-              <Icon name="file" className="h-4.5 w-4.5" />
-            </span>
-            <input
-              ref={inputRef}
-              id="pdf-upload"
-              type="file"
-              accept="application/pdf,.pdf"
-              className="sr-only"
-              onChange={(event) => upload(event.target.files?.[0])}
-            />
-            <label
-              htmlFor="pdf-upload"
-              className="cursor-pointer text-sm font-medium text-primary hover:underline"
-            >
-              Choose a PDF
-            </label>
-            <p className="mt-1 text-xs text-ink-faint">
-              or drop one here — up to 10 MB
-            </p>
-          </>
-        )}
-      </div>
+  return (
+    <section>
+      <input
+        ref={inputRef}
+        id="pdf-upload"
+        type="file"
+        accept="application/pdf,.pdf"
+        className="sr-only"
+        onChange={(event) => upload(event.target.files?.[0])}
+      />
+
+      {!hasDocuments && (
+        <div
+          onDragOver={(event) => {
+            event.preventDefault();
+            setIsDragging(true);
+          }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setIsDragging(false);
+            upload(event.dataTransfer.files?.[0]);
+          }}
+          className={`rounded-xl border border-dashed px-6 py-16 text-center transition-colors ${
+            isDragging ? "border-primary bg-primary-soft" : "border-border-strong"
+          }`}
+        >
+          {isUploading ? (
+            <Spinner label="Reading and indexing your PDF…" />
+          ) : (
+            <>
+              <label
+                htmlFor="pdf-upload"
+                className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-medium text-on-primary transition-colors hover:bg-primary-hover"
+              >
+                <Icon name="paperclip" className="h-4 w-4" />
+                Choose a PDF
+              </label>
+              <p className="mt-3 text-sm text-ink-muted">
+                or drop one here — up to 10 MB
+              </p>
+              <p className="mx-auto mt-4 max-w-sm text-xs text-ink-faint">
+                Answers are built only from passages retrieved out of your own
+                document. Nothing is shared: your uploads are visible only to
+                you and are deleted after 24 hours.
+              </p>
+            </>
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="mt-3">
@@ -139,54 +145,64 @@ export default function UploadPanel({
         </div>
       )}
 
-      {documents.length > 0 && (
-        <ul className="mt-3 space-y-2">
+      {hasDocuments && (
+        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
           {documents.map((document) => (
             <li
               key={document.id}
-              className="rounded-xl border border-border bg-surface-raised p-3"
+              className="flex flex-wrap items-center gap-x-3 gap-y-2 bg-surface-raised px-3.5 py-3"
             >
-              <p className="truncate text-sm font-medium text-ink" title={document.title}>
-                {document.title}
-              </p>
-              <p className="mt-0.5 text-xs text-ink-faint">
-                {document.pageCount} pages · {document.chunkCount} passages
-              </p>
+              <Icon name="file" className="h-4 w-4 shrink-0 text-ink-faint" />
 
-              <div className="mt-2 flex items-center gap-1">
-                {/*
-                  Summarising is the one thing here that is not a question, so
-                  it gets its own control rather than a suggested prompt the
-                  visitor has to think to type.
-                */}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm text-ink" title={document.title}>
+                  {document.title}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-faint">
+                  {document.pageCount} pages · {document.chunkCount} passages ·
+                  deleted after 24h
+                </p>
+              </div>
+
+              <div className="flex shrink-0 items-center gap-1">
+                {/* Summarising is the one thing here that is not a question,
+                    so it gets its own control rather than a suggested prompt
+                    the visitor has to think to type. */}
                 <button
                   type="button"
                   onClick={() => onSummarise?.(document)}
                   disabled={isBusy}
-                  className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary-soft disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-lg px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary-soft disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  <Icon name="sparkle" className="h-3.5 w-3.5" />
                   Summarise
                 </button>
                 <button
                   type="button"
                   onClick={() => remove(document.id, document.title)}
-                  className="ml-auto flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-ink-faint transition-colors hover:bg-danger-soft hover:text-danger"
+                  className="rounded-lg px-2 py-1 text-xs text-ink-faint transition-colors hover:bg-danger-soft hover:text-danger"
                 >
-                  <Icon name="trash" className="h-3.5 w-3.5" />
                   Remove
                 </button>
               </div>
             </li>
           ))}
-        </ul>
-      )}
 
-      {documents.length === 0 && !isUploading && (
-        <p className="mt-3 text-xs text-ink-faint">
-          Nothing is shared. Your uploads are visible only to you and are
-          deleted automatically after 24 hours.
-        </p>
+          {isUploading ? (
+            <li className="bg-surface-raised px-3.5 py-3">
+              <Spinner label="Reading and indexing your PDF…" />
+            </li>
+          ) : (
+            <li className="bg-surface-raised px-3.5 py-2">
+              <label
+                htmlFor="pdf-upload"
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-ink-muted transition-colors hover:bg-primary-soft hover:text-primary"
+              >
+                <Icon name="plus" className="h-3.5 w-3.5" />
+                Add another
+              </label>
+            </li>
+          )}
+        </ul>
       )}
     </section>
   );

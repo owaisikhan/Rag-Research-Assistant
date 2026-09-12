@@ -237,63 +237,60 @@ Two consequences worth knowing:
 
 ## The interface
 
-Dark-first, built around a single focal composer, with a violet-to-magenta
-brand sweep defined once in `.brand-gradient` so the rail, the send button and
-the focus glow cannot drift apart.
+One centred column, warm neutrals, a single brass accent, no gradients.
+
+The palette is ink on paper: a warm near-black ground rather than a blue-black,
+warm off-white type rather than pure white, and one accent that reads like a
+bookmark ribbon. This is a deliberate move away from violet-to-magenta, which
+has become the house style of every AI demo and now signals "template" before a
+visitor has read a word. Warm neutrals with a single metallic accent read as
+editorial, which is what a tool for reading documents should look like.
 
 Theme is a `data-theme` attribute on `<html>`, applied by a blocking script in
 `<head>` before first paint — otherwise a light-theme visitor watches the page
-render dark and then flip. It defaults to dark even on a light-mode machine:
-the design is dark-first and the toggle is one click away.
+render dark and then flip. It defaults to dark; light is a complete theme, not
+an afterthought.
 
-Two traps worth knowing, both of which bit during the build:
+**`@theme` cannot be nested.** Tailwind v4 hoists its declarations out of
+whatever wraps them, so a dark block inside `@media` is emitted unconditionally
+and wins. The light palette is a plain `:root[data-theme="light"]` rule for
+that reason.
 
-- **`@theme` cannot be nested.** Tailwind v4 hoists its declarations out of
-  whatever wraps them, so a dark block inside `@media` is emitted
-  unconditionally and wins. The light palette is a plain
-  `:root[data-theme="light"]` rule for that reason.
-- **An animation that sets `opacity` beats an `opacity` declaration.** Dimming
-  the idle orb in light mode silently did nothing until peak opacity was moved
-  into a `--orb-opacity` custom property the keyframes read.
+### What was removed, and why
 
-### What is real, and what is staged
+An earlier pass copied a reference chatbot template: a gradient nav rail, a
+gradient top bar with search, notifications and an avatar, a glowing orb behind
+the empty state, and a composer toolbar of four icons wired to "coming soon".
 
-The shell carries controls the product does not have behind it yet, because a
-pitch reads better when it looks like a product than a page. **Every staged
-control in the top bar and composer says what it will do when clicked** rather
-than sitting dead — a button that looks live and does nothing reads as broken,
-not as unfinished.
+All of it is gone. The rail navigated nothing — this is one screen. The search,
+bell and avatar were chrome for features that do not exist. The orb was the
+single clearest tell that a page came out of a template. And a row of icons for
+features that do not exist is the visual equivalent of a stock photo: it fills
+the space and tells the viewer nothing true. In a demo the first thing anyone
+does is click them, and four dead ends in a row costs more trust than an empty
+toolbar ever would.
 
-The nav rail is the exception, and deliberately so: it is decoration, so its
-marks are rendered as plain `<span>`s rather than buttons. No pointer cursor,
-no focus ring, nothing that invites a click it cannot answer. A dead button is
-worse than no button; a mark that was never clickable is furniture.
+What is left is what works:
 
-| Real today | Staged |
+| Control | Does |
 |---|---|
-| Ask, with streaming answers | Global search |
-| Attach a PDF (the composer's `+`) | Notifications |
-| Summarise a document | Account / sign-in |
-| Copy an answer | Sidebar sections (Overview, Library, Insights, Billing, Preferences) |
-| Export chat to Markdown | Voice input |
-| Clear chat | Web search alongside documents |
-| Fullscreen | Improve-this-question |
-| Light / dark theme | Output format (table / JSON) |
-| Remove a document | Share a conversation by link |
+| Choose / drop a PDF | Uploads and indexes it |
+| Attach PDF (in the composer) | The same, without leaving the question |
+| Ask | Streams a grounded answer |
+| Summarise | Summarises that whole document |
+| Copy (on hover) | Copies an answer |
+| Export chat | Downloads the conversation as Markdown |
+| Clear chat | Empties it |
+| Fullscreen | Real fullscreen |
+| Theme | Light / dark |
+| Remove | Deletes that document |
 
-The rail, the brand mark and the corner button are fixed to the viewport edge
-rather than being a column in the layout, which is what lets the rail sit flush
-to the left with its corners curving out of the page. Those inverted corners
-are two squares of rail colour with a rounded cut-out of page colour laid over
-each — `border-radius` only curves inward, so there is no direct way to do it.
-
-Desktop is tuned; mobile currently degrades rather than being designed (the
-rail is hidden below `lg` and the columns stack). It does not overflow at
-390px, but it has not had a layout pass.
-
-Share is staged on purpose rather than for time: a shareable link means storing
-a conversation server-side under a public id, which is a privacy decision about
+Share-by-link is the one thing deliberately not built: it means storing a
+conversation server-side under a public id, which is a privacy decision about
 documents the visitor was promised were private.
+
+Desktop is tuned; mobile currently degrades rather than being designed. It does
+not overflow at 390px, but it has not had a layout pass.
 
 ## Adding your own documents
 
@@ -367,9 +364,9 @@ citation that does not check out, which is worse than no citation at all.
 app/
   _components/ui/          generic, knows nothing about the domain
   _components/ui/Icon.jsx  the icon set, as inline SVG (no icon package)
-  _components/ui/Toaster.jsx  transient feedback; staged controls speak here
-  _components/shell/       sidebar rail, top bar, pre-paint theme script
-  _components/chat/        the conversation, composer, citations, sources
+  _components/ui/Toaster.jsx  transient feedback
+  _components/shell/       theme toggle + the pre-paint theme script
+  _components/chat/        the conversation, composer, uploads, sources
   _lib/
     rag/embed.js           embedding provider (swappable)
     rag/retrieve.js        hybrid search

@@ -1,40 +1,44 @@
 @import "tailwindcss";
 
 /* Colour tokens are named by ROLE, never by hue, so a rebrand is a token swap
-   rather than a grep for "violet".
+   rather than a grep for "amber".
 
-   DARK IS THE DEFAULT here, which is a change: the product reads as a piece of
-   software rather than a document, and the dark palette is what carries the
-   glow and gradient work. Light is a real, complete theme -- not an
-   afterthought -- reachable from the toggle in the top bar. */
+   The palette is ink on paper, not a product gradient. The ground is a warm
+   near-black rather than a blue-black, the type is a warm off-white rather
+   than pure white, and there is exactly one accent: a brass that reads like a
+   bookmark ribbon or the glow of a reading lamp. No gradients anywhere.
+
+   This is a deliberate move away from violet-to-magenta, which has become the
+   house style of every AI demo and now signals "template" before a visitor has
+   read a word. Warm neutrals with a single metallic accent read as editorial,
+   which is what a tool for reading documents should look like. */
 @theme {
-  /* Near-black with a violet cast, rather than neutral grey. A true grey
-     under a violet accent reads as dirty; sharing the hue keeps it clean. */
-  --color-surface: oklch(13.5% 0.025 283);
-  --color-surface-raised: oklch(18% 0.028 283);
-  --color-surface-sunken: oklch(10.5% 0.022 283);
+  --color-surface: oklch(15.5% 0.006 70);
+  --color-surface-raised: oklch(19.5% 0.007 70);
+  --color-surface-sunken: oklch(12.5% 0.005 70);
 
-  /* Borders are translucent white rather than a solid step, so a raised
-     surface over a glow still reads as edged instead of banded. */
-  --color-border: oklch(100% 0 0 / 0.10);
-  --color-border-strong: oklch(100% 0 0 / 0.18);
+  /* Translucent white rather than a solid step, so a raised surface over
+     another raised surface still reads as edged instead of banded. */
+  --color-border: oklch(100% 0 0 / 0.09);
+  --color-border-strong: oklch(100% 0 0 / 0.17);
 
-  --color-ink: oklch(98% 0.003 248);
-  --color-ink-muted: oklch(74% 0.02 278);
-  --color-ink-faint: oklch(58% 0.025 280);
+  --color-ink: oklch(93% 0.010 85);
+  --color-ink-muted: oklch(71% 0.014 78);
+  --color-ink-faint: oklch(55% 0.013 75);
 
-  --color-primary: oklch(58% 0.26 287);
-  --color-primary-hover: oklch(65% 0.24 287);
-  --color-primary-soft: oklch(28% 0.09 287);
+  --color-primary: oklch(77% 0.125 72);
+  --color-primary-hover: oklch(83% 0.120 75);
+  --color-primary-soft: oklch(26% 0.045 70);
 
-  /* The second stop of every gradient. Magenta, not blue: the violet-to-
-     magenta sweep is what makes the brand read as one thing. */
-  --color-accent: oklch(65% 0.28 322);
+  /* What sits ON a primary-filled surface. A token rather than a hard-coded
+     white, because on a light brass that would be unreadable -- and it is, in
+     the light theme, where this flips to near-white on a deeper brass. */
+  --color-on-primary: oklch(18% 0.02 70);
 
-  --color-danger: oklch(64% 0.21 18);
-  --color-danger-soft: oklch(28% 0.08 18);
+  --color-danger: oklch(66% 0.150 28);
+  --color-danger-soft: oklch(26% 0.050 28);
 
-  --color-success: oklch(72% 0.17 155);
+  --color-success: oklch(70% 0.110 150);
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
@@ -47,27 +51,26 @@
    unconditionally and wins the cascade. That is how this project once shipped
    a permanently dark page. */
 :root[data-theme="light"] {
-  --color-surface: oklch(98.5% 0.004 285);
-  --color-surface-raised: oklch(100% 0 0);
-  --color-surface-sunken: oklch(96% 0.006 285);
+  --color-surface: oklch(97.5% 0.006 85);
+  --color-surface-raised: oklch(100% 0.002 85);
+  --color-surface-sunken: oklch(95% 0.008 85);
 
-  --color-border: oklch(20% 0.02 285 / 0.12);
-  --color-border-strong: oklch(20% 0.02 285 / 0.22);
+  --color-border: oklch(25% 0.02 70 / 0.14);
+  --color-border-strong: oklch(25% 0.02 70 / 0.26);
 
-  --color-ink: oklch(20% 0.02 285);
-  --color-ink-muted: oklch(48% 0.02 285);
-  --color-ink-faint: oklch(62% 0.02 285);
+  --color-ink: oklch(24% 0.015 70);
+  --color-ink-muted: oklch(46% 0.015 70);
+  --color-ink-faint: oklch(60% 0.015 70);
 
-  --color-primary: oklch(52% 0.25 287);
-  --color-primary-hover: oklch(46% 0.25 287);
-  --color-primary-soft: oklch(95% 0.035 287);
+  --color-primary: oklch(50% 0.115 62);
+  --color-primary-hover: oklch(43% 0.115 62);
+  --color-primary-soft: oklch(94% 0.030 75);
+  --color-on-primary: oklch(99% 0.005 85);
 
-  --color-accent: oklch(58% 0.26 322);
+  --color-danger: oklch(52% 0.170 28);
+  --color-danger-soft: oklch(95% 0.025 28);
 
-  --color-danger: oklch(53% 0.21 18);
-  --color-danger-soft: oklch(96% 0.03 18);
-
-  --color-success: oklch(52% 0.15 155);
+  --color-success: oklch(48% 0.100 150);
 }
 
 @layer base {
@@ -100,79 +103,18 @@
 }
 
 @layer components {
-  /* The brand sweep. One definition, so the rail, the send button and the
-     focus glow cannot drift apart. */
-  .brand-gradient {
-    background-image: linear-gradient(
-      135deg,
-      var(--color-primary) 0%,
-      var(--color-accent) 100%
-    );
-  }
-
-  .brand-text {
-    background-image: linear-gradient(
-      135deg,
-      var(--color-primary) 0%,
-      var(--color-accent) 100%
-    );
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-
-
-  /* The rail's inverted corners.
-     A border-radius curves inward; what the reference has is the page
-     background curving INTO the rail above and below it. So each notch is a
-     square of rail colour with a rounded square of page colour laid on top --
-     the cut-out is the illusion. The two squares take the gradient's end
-     colours rather than the gradient itself, which is indistinguishable at
-     2rem and avoids a second gradient that would have to stay in sync. */
-  .rail-notch {
-    position: absolute;
-    left: 0;
-    width: 2rem;
-    height: 2rem;
-  }
-
-  .rail-notch::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background-color: var(--color-surface);
-  }
-
-  .rail-notch-top {
-    top: -2rem;
-    background-color: var(--color-primary);
-  }
-
-  .rail-notch-top::after {
-    border-bottom-left-radius: 2rem;
-  }
-
-  .rail-notch-bottom {
-    bottom: -2rem;
-    background-color: var(--color-accent);
-  }
-
-  .rail-notch-bottom::after {
-    border-top-left-radius: 2rem;
-  }
-
-  /* The composer's lift. A ring plus a wide soft shadow in the brand hue --
-     the thing that makes the input read as the focal point of the page. */
-  .composer-glow {
+  /* The composer's lift. A hairline ring and a plain shadow -- the job is to
+     separate it from the page, not to glow. */
+  .composer-ring {
     box-shadow:
       0 0 0 1px var(--color-border),
-      0 18px 50px -12px oklch(58% 0.26 287 / 0.28);
+      0 10px 30px -14px rgb(0 0 0 / 0.7);
   }
 
-  .composer-glow:focus-within {
+  .composer-ring:focus-within {
     box-shadow:
-      0 0 0 1px var(--color-primary),
-      0 18px 60px -10px oklch(58% 0.26 287 / 0.45);
+      0 0 0 1px var(--color-border-strong),
+      0 10px 30px -14px rgb(0 0 0 / 0.7);
   }
 
   /* The answer body. Slightly larger and looser than UI text, because it is
@@ -200,46 +142,6 @@
   .answer-prose li + li {
     margin-top: 0.3rem;
   }
-}
-
-/* The idle orb behind an empty conversation. Pure CSS -- a radial gradient
-   with a slow breath -- rather than an image or a canvas, so it costs nothing
-   to load and recolours with the theme. */
-/* Peak opacity comes from --orb-opacity rather than being hard-coded, because
-   an animation that sets `opacity` overrides any opacity declared on the
-   element -- so the obvious "dim it in light mode" rule silently does nothing.
-   Custom properties are not animatable, but they ARE substituted per keyframe,
-   which is exactly what is needed here. */
-@keyframes orb-breathe {
-  0%, 100% { transform: scale(1); opacity: calc(var(--orb-opacity) * 0.85); }
-  50%      { transform: scale(1.06); opacity: var(--orb-opacity); }
-}
-
-/* The orb is a dark-theme device: the same gradient over white is a purple
-   smear that swallows the text in front of it. Light gets a much fainter
-   version rather than none, so the empty state still has a centre. */
-:root[data-theme="light"] .idle-orb {
-  --orb-opacity: 0.28;
-  opacity: 0.28; /* the reduced-motion path, where the animation is off */
-}
-
-.idle-orb {
-  --orb-opacity: 1;
-  opacity: var(--orb-opacity);
-  /* A RING, not a blob: a dark core, a bright rim, then a fade. The stops
-     matter -- a bright centre reads as a spotlight behind the text, whereas
-     the rim reads as an object sitting in the space. */
-  background-image: radial-gradient(
-    circle at 50% 50%,
-    oklch(22% 0.10 300 / 0.95) 0%,
-    oklch(26% 0.13 300 / 0.95) 28%,
-    oklch(68% 0.22 300 / 0.85) 46%,
-    oklch(62% 0.26 315 / 0.45) 58%,
-    oklch(60% 0.24 320 / 0.12) 68%,
-    transparent 76%
-  );
-  filter: blur(18px);
-  animation: orb-breathe 6s ease-in-out infinite;
 }
 
 /* The caret that trails a streaming answer, so it is obvious the reply is
@@ -270,6 +172,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .streaming-caret { animation: none; opacity: 1; }
-  .idle-orb { animation: none; }
   .toast-in { animation: none; }
 }

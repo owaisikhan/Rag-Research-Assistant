@@ -1,7 +1,5 @@
 import ChatPanel from "@/app/_components/chat/ChatPanel";
 import Callout from "@/app/_components/ui/Callout";
-import Sidebar from "@/app/_components/shell/Sidebar";
-import TopBar from "@/app/_components/shell/TopBar";
 import { Toaster } from "@/app/_components/ui/Toaster";
 import { siteConfig } from "@/app/_lib/siteConfig";
 import { getCorpusStats } from "@/app/_lib/data-service";
@@ -27,15 +25,11 @@ export default async function HomePage() {
 
   return (
     <Toaster>
-      {/* The rail and the mark are fixed to the viewport edge, as in the
-          reference, so they are siblings of the content rather than a column
-          inside it. The left padding is what keeps the content clear of them. */}
-      <Sidebar />
-
-      <div className="mx-auto w-full max-w-[86rem] px-4 py-6 sm:px-6 lg:pl-[7.5rem] lg:pr-8">
-        <main className="min-w-0">
-          <TopBar />
-
+      {/* min-h-dvh + flex-1 pins the footer to the bottom of the viewport on a
+          short page, so an empty state does not leave the rule and the footer
+          floating halfway up with nothing under them. */}
+      <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 py-10 sm:px-6">
+        <main className="min-w-0 flex-1">
           {!isConfigured ? (
             <Callout tone="danger">
               Supabase is not configured. Copy <code>.env.example</code> to{" "}
@@ -52,15 +46,17 @@ export default async function HomePage() {
           ) : (
             <ChatPanel />
           )}
-
-          <footer className="mt-12 border-t border-border pt-5 text-xs text-ink-faint">
-            <p>
-              {siteConfig.mode.showCitations
-                ? "Answers are generated from retrieved passages only. Citations link to the page they came from — check them."
-                : "Answers are generated only from the documents you upload. Uploads are private to you and are deleted after 24 hours."}
-            </p>
-          </footer>
         </main>
+
+        {/* A sibling of <main>, not a child of it -- flex-1 on main can only
+            push down what sits beside it. */}
+        <footer className="mx-auto mt-12 w-full max-w-3xl border-t border-border pt-5 text-xs text-ink-faint">
+          <p>
+            {siteConfig.mode.showCitations
+              ? "Answers are generated from retrieved passages only. Citations link to the page they came from — check them."
+              : "Answers are generated only from the documents you upload. Uploads are private to you and are deleted after 24 hours."}
+          </p>
+        </footer>
       </div>
     </Toaster>
   );

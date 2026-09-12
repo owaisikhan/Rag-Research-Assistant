@@ -7,6 +7,7 @@ import SourceCard from "./SourceCard";
 import UploadPanel from "./UploadPanel";
 import Composer from "./Composer";
 import OptionsMenu from "./OptionsMenu";
+import ThemeToggle from "../shell/ThemeToggle";
 import Icon from "../ui/Icon";
 import { useToast } from "../ui/Toaster";
 import { siteConfig } from "@/app/_lib/siteConfig";
@@ -16,8 +17,7 @@ import Callout from "../ui/Callout";
 const STARTERS = [
   "What is this document about?",
   "What are the key points?",
-  "Is there anything here I should be careful about?",
-  "What does it say about dates and deadlines?",
+  "Anything here I should be careful about?",
 ];
 
 /**
@@ -206,179 +206,142 @@ export default function ChatPanel() {
 
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
   const visibleSources = lastAssistant?.sources ?? [];
+  const hasDocuments = documents.length > 0;
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_18rem]">
-      {/* ---------------------------------------------------- conversation */}
-      <div className="flex min-w-0 flex-col self-start">
-        <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-ink sm:text-4xl">
-              {siteConfig.name}
-            </h1>
-            <p className="mt-1.5 text-[0.95rem] text-ink-muted">{siteConfig.tagline}</p>
-          </div>
+    // One centred column. The sidebar and the right-hand document rail are
+    // both gone: this is a page for reading one conversation, and every column
+    // added to that is a column competing with it.
+    <div className="mx-auto w-full max-w-3xl">
+      <header className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">
+            {siteConfig.name}
+          </h1>
+          <p className="mt-1 text-sm text-ink-muted">{siteConfig.tagline}</p>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2">
+          <ThemeToggle />
           <OptionsMenu messages={messages} onClear={clearChat} />
         </div>
+      </header>
 
-        <div className="flex-1 space-y-5">
-          {isEmpty && (
-            <div className="flex flex-col items-center justify-center py-6 text-center sm:py-8">
-              {/* The orb. Pure decoration, and the reason the empty state
-                  reads as a product waiting rather than a page missing its
-                  content. It gets its own space rather than sitting behind the
-                  text -- a ring under a paragraph is a contrast problem, and
-                  the reference keeps it clear for the same reason. */}
-              <div className="idle-orb pointer-events-none mb-8 h-52 w-52 shrink-0 rounded-full" />
+      <UploadPanel
+        documents={documents}
+        onChange={refreshDocuments}
+        onSummarise={summarise}
+        isBusy={isStreaming}
+        incomingFile={pendingFile}
+        onIncomingHandled={() => setPendingFile(null)}
+      />
 
-              <div>
-                <p className="text-base font-medium text-ink">
-                  {documents.length === 0
-                    ? "Upload a PDF to get started"
-                    : `Ask anything about your ${documents.length === 1 ? "document" : "documents"}`}
-                </p>
-                <p className="mx-auto mt-2 max-w-md text-sm text-ink-muted">
-                  {documents.length === 0
-                    ? "Every answer is built only from passages retrieved out of your own document — never from outside it."
-                    : `Answers come only from what is in ${documents.length === 1 ? "it" : "them"}, so you can check every claim.`}
-                </p>
-              </div>
-            </div>
-          )}
+      {hasDocuments && (
+        <>
+          <div className="mt-8 space-y-5">
+            {isEmpty && (
+              <p className="text-sm text-ink-muted">
+                Ask anything about your{" "}
+                {documents.length === 1 ? "document" : "documents"}. Answers come
+                only from what is in {documents.length === 1 ? "it" : "them"}.
+              </p>
+            )}
 
-          {messages.map((message, index) =>
-            message.role === "user" ? (
-              <div key={index} className="flex justify-end">
-                <p className="brand-gradient max-w-[85%] rounded-2xl rounded-br-sm px-4 py-2.5 text-sm text-white shadow-md">
-                  {message.content}
-                </p>
-              </div>
-            ) : (
-              <div key={index} className="group max-w-none">
-                {message.content === "" && isStreaming ? (
-                  <Spinner label={message.waiting ?? "Working"} />
-                ) : (
-                  <>
-                    <AnswerText
-                      text={message.content}
-                      sources={message.sources ?? []}
-                      onCite={setActiveCitation}
-                      activeNumber={activeCitation}
+            {messages.map((message, index) =>
+              message.role === "user" ? (
+                <div key={index} className="flex justify-end">
+                  <p className="max-w-[85%] rounded-xl rounded-br-sm border border-border bg-surface-raised px-3.5 py-2 text-sm text-ink">
+                    {message.content}
+                  </p>
+                </div>
+              ) : (
+                <div key={index} className="group max-w-none">
+                  {message.content === "" && isStreaming ? (
+                    <Spinner label={message.waiting ?? "Working"} />
+                  ) : (
+                    <>
+                      <AnswerText
+                        text={message.content}
+                        sources={message.sources ?? []}
+                        onCite={setActiveCitation}
+                        activeNumber={activeCitation}
+                      />
+                      {isStreaming && index === messages.length - 1 && (
+                        <span className="streaming-caret" aria-hidden="true" />
+                      )}
+
+                      {message.content !== "" && (
+                        <div className="mt-2 flex gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                          <button
+                            type="button"
+                            onClick={() => copyAnswer(message.content)}
+                            className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-ink-faint transition-colors hover:bg-primary-soft hover:text-primary"
+                          >
+                            <Icon name="copy" className="h-3.5 w-3.5" />
+                            Copy
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )
+            )}
+
+            {siteConfig.mode.showCitations && visibleSources.length > 0 && (
+              <section>
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+                  Sources ({visibleSources.length} passages)
+                </h2>
+                <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {visibleSources.map((source) => (
+                    <SourceCard
+                      key={source.chunkId}
+                      source={source}
+                      isActive={activeCitation === source.number}
+                      onSelect={(number) =>
+                        setActiveCitation((current) => (current === number ? null : number))
+                      }
                     />
-                    {isStreaming && index === messages.length - 1 && (
-                      <span className="streaming-caret" aria-hidden="true" />
-                    )}
+                  ))}
+                </ul>
+              </section>
+            )}
 
-                    {/* Appears on hover, as the reference does. Copy is real;
-                        it is the one message action worth having. */}
-                    {message.content !== "" && (
-                      <div className="mt-2 flex gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-                        <button
-                          type="button"
-                          onClick={() => copyAnswer(message.content)}
-                          className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-ink-faint transition-colors hover:bg-primary-soft hover:text-primary"
-                        >
-                          <Icon name="copy" className="h-3.5 w-3.5" />
-                          Copy
-                        </button>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            )
-          )}
+            {error && <Callout tone="danger">{error}</Callout>}
+            <div ref={endRef} />
+          </div>
 
-          {error && <Callout tone="danger">{error}</Callout>}
-          <div ref={endRef} />
-        </div>
+          <div className="sticky bottom-0 mt-6 bg-surface pb-4 pt-3">
+            <Composer
+              value={input}
+              onChange={setInput}
+              onSubmit={() => ask(input)}
+              onAttach={(file) => setPendingFile(file)}
+              disabled={false}
+              isStreaming={isStreaming}
+              inputRef={inputRef}
+              placeholder="Ask a question about your documents…"
+            />
 
-        {/* ------------------------------------------------------- composer */}
-        <div className="sticky bottom-0 mt-6 bg-surface pt-3">
-          <Composer
-            value={input}
-            onChange={setInput}
-            onSubmit={() => ask(input)}
-            onAttach={(file) => setPendingFile(file)}
-            disabled={documents.length === 0}
-            isStreaming={isStreaming}
-            inputRef={inputRef}
-            placeholder={
-              documents.length === 0
-                ? "Upload a PDF first…"
-                : "Ask anything about your documents…"
-            }
-          />
-
-          {isEmpty && documents.length > 0 && (
-            <div className="mt-4">
-              <p className="mb-2 text-center text-xs text-ink-faint">Try asking</p>
-              <div className="flex flex-wrap justify-center gap-2">
+            {isEmpty && (
+              <div className="mt-3 flex flex-wrap gap-2">
                 {STARTERS.map((starter) => (
                   <button
                     key={starter}
                     type="button"
                     onClick={() => ask(starter)}
-                    className="rounded-full border border-border bg-surface-raised px-3.5 py-1.5 text-xs text-ink-muted transition-colors hover:border-primary hover:text-primary"
+                    className="rounded-lg border border-border px-2.5 py-1.5 text-xs text-ink-muted transition-colors hover:border-border-strong hover:text-ink"
                   >
                     {starter}
                   </button>
                 ))}
               </div>
-            </div>
-          )}
-
-          <p className="mt-3 text-center text-xs text-ink-faint">
-            Click + to attach a PDF · Hover an answer to copy it · Uploads are
-            deleted after 24 hours
-          </p>
-        </div>
-      </div>
-
-      {/* --------------------------------------------------------- sources */}
-      <aside className="lg:sticky lg:top-6 lg:self-start">
-        <UploadPanel
-          documents={documents}
-          onChange={refreshDocuments}
-          onSummarise={summarise}
-          isBusy={isStreaming}
-          incomingFile={pendingFile}
-          onIncomingHandled={() => setPendingFile(null)}
-        />
-
-        {siteConfig.mode.showCitations && (
-          <>
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
-              Sources
-              {visibleSources.length > 0 && (
-                <span className="ml-1.5 font-normal normal-case tracking-normal">
-                  ({visibleSources.length} passages)
-                </span>
-              )}
-            </h2>
-
-            {visibleSources.length === 0 ? (
-              <p className="mt-3 text-sm text-ink-faint">
-                The passages behind each answer appear here, with page numbers.
-              </p>
-            ) : (
-              <ul className="mt-3 space-y-2">
-                {visibleSources.map((source) => (
-                  <SourceCard
-                    key={source.chunkId}
-                    source={source}
-                    isActive={activeCitation === source.number}
-                    onSelect={(number) =>
-                      setActiveCitation((current) => (current === number ? null : number))
-                    }
-                  />
-                ))}
-              </ul>
             )}
-          </>
-        )}
-      </aside>
+          </div>
+        </>
+      )}
     </div>
   );
 }
