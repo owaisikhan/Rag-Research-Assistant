@@ -3,15 +3,8 @@ import "server-only";
 import { embedDocuments } from "./embed.js";
 import { recordUsage } from "./usage.js";
 
-// How many passages one request can embed.
-//
-// Embedding is paced by the provider, so this is a time calculation, not a
-// memory one: (budget x share) / 60 x requests-per-minute. Both routes derive
-// it the same way, because a continue pass that assumed a different budget
-// than the first pass would either waste time or die at the platform timeout.
-export function passagesPerPass({ budgetSeconds, embedRpm, embedShare }) {
-  return Math.max(1, Math.floor(((budgetSeconds * embedShare) / 60) * embedRpm));
-}
+// Re-exported so callers have one import for "run a pass" and "how big".
+export { passagesPerPass } from "./pass-size.js";
 
 /**
  * Embed the next batch of a document's unembedded passages.

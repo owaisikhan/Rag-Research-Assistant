@@ -82,12 +82,13 @@ export default function UploadPanel({
         return;
       }
 
-      // A long document comes back still indexing. Embedding is paced by the
-      // provider, so it cannot finish inside one request however long that
-      // request is allowed to run -- the file is uploaded once and the work
-      // continues across further passes.
+      // The upload stores the passages and returns; embedding happens in
+      // further requests so that every one of them can report progress.
       if (result.indexing) {
         const total = result.document.chunkCount;
+        // Shown before the first embedding request even starts, so the count
+        // appears immediately rather than after the first pass completes.
+        setProgress({ done: 0, total });
         await finishIndexing(result.document.id, total);
       }
 

@@ -16,7 +16,6 @@ import { createClient } from "@/app/_lib/supabase-server";
 import { ensureSessionId } from "@/app/_lib/session";
 import { checkRateLimit, refundRateLimit } from "@/app/_lib/rag/limits";
 import { recordUsage, DAILY_LIMITS } from "@/app/_lib/rag/usage";
-import { runIndexPass, passagesPerPass } from "@/app/_lib/rag/index-pass";
 
 export const runtime = "nodejs";
 
@@ -152,17 +151,9 @@ export async function POST(request) {
     );
   }
 
-  // How many passages one request can embed. Embedding is paced by the
-  // provider, so this is a time calculation rather than a memory one.
-  const perPass = passagesPerPass({
-    budgetSeconds: TIME_BUDGET_S,
-    embedRpm: EMBED_RPM,
-    embedShare: EMBED_SHARE,
-  });
-
-  // A document larger than one pass is no longer refused -- it is indexed
-  // across several. What IS still refused is a document larger than the
-  // provider's whole daily allowance, because no number of passes can finish
+  // A long document is no longer refused -- it is indexed across several
+  // requests. What IS still refused is a document larger than the provider's
+  // whole daily allowance, because no number of passes can finish
   // it and a visitor should learn that now rather than after watching a
   // progress bar climb for ten minutes.
   if (chunks.length > DAILY_EMBED_LIMIT) {
@@ -230,46 +221,28 @@ export async function POST(request) {
       if (error) throw new Error(error.message);
     }
 
-    const { remaining } = await runIndexPass({
-      supabase,
-      sessionId,
-      documentId,
-      limit: perPass,
-    });
-
-    // Still passages to embed: the document stays `pending:` -- and therefore
-    // unsearchable -- until the browser comes back for the next pass.
-    if (remaining > 0) {
-      return Response.json({
-        ok: true,
-        indexing: true,
-        document: {
-          id: documentId,
-          title,
-          fileName: file.name,
-          pageCount,
-          chunkCount: chunks.length,
-          remaining,
-        },
-      });
-    }
-
-    const { data: stored, error: finishError } = await supabase.rpc("finish_upload", {
-      p_session: sessionId,
-      p_document: documentId,
-      p_content_hash: contentHash,
-    });
-
-    if (finishError) throw new Error(finishError.message);
-
+    // Returns as soon as the passages are STORED, before embedding any of
+    // them. Embedding then happens entirely in /api/upload/continue, one pass
+    // per request, each reporting how far along it is.
+    //
+    // The first pass used to run here, which meant the longest single wait --
+    // up to the whole time budget, minutes for a large document -- was the one
+    // stretch with no progress to show. A spinner that does not move for three
+    // minutes is indistinguishable from a hang, and someone watching it will
+    // reload and start the whole upload again.
+    //
+    // The cost is one extra round trip for a small document. That request
+    // takes about as long as embedding it did, so nothing is actually slower.
     return Response.json({
       ok: true,
+      indexing: true,
       document: {
         id: documentId,
         title,
         fileName: file.name,
         pageCount,
-        chunkCount: stored,
+        chunkCount: chunks.length,
+        remaining: chunks.length,
       },
     });
   } catch (error) {

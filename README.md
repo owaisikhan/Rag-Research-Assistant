@@ -209,10 +209,23 @@ one request's duration however generous that duration is. It used to be refused
 outright, with a sentence naming what would fit — honest, but not useful when
 the answer is "your document".
 
-The file is now uploaded **once**. Extraction and chunking are local and free,
-so every passage is stored on the first request with no embedding; each pass
-then embeds as many as its budget allows, and the browser comes back until
-there are none left. The document keeps its `pending:` hash throughout.
+The file is uploaded **once**, and that request returns as soon as the passages
+are *stored* — before any of them are embedded. Extraction and chunking are
+local and free, so this takes seconds. Every embedding then happens in
+`/api/upload/continue`, one pass per request.
+
+Putting the first pass in the upload request was the obvious shape and the
+wrong one: the longest single wait, up to the whole time budget, was the one
+stretch with no progress to report. A spinner that does not move for three
+minutes is indistinguishable from a hang, and someone watching it reloads and
+starts the upload again.
+
+A pass is capped at 60 seconds of embedding rather than the whole budget, for
+the same reason — pass length is how often the count moves. At the full budget
+a 460-passage document would report twice in five minutes. It also means a
+failed pass loses a minute of work rather than three.
+
+The document keeps its `pending:` hash throughout.
 
 That sentinel is what makes this safe, and it was built for timeouts rather
 than for this — it works unchanged. Verified on a deliberately half-indexed
