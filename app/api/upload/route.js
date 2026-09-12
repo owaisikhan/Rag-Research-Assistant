@@ -17,14 +17,36 @@ import { ensureSessionId } from "@/app/_lib/session";
 import { checkRateLimit } from "@/app/_lib/rag/limits";
 
 export const runtime = "nodejs";
-// Vercel terminates a function that exceeds this -- it does not restart or
-// retry it -- so the ceiling has to cover the slowest realistic upload.
+
+// Vercel TERMINATES a function that exceeds this. It does not restart or retry
+// it, and whatever was already written stays written.
 //
-// 300s is the limit on Hobby with fluid compute (on by default); an earlier
-// value of 60 here was simply wrong and capped uploads at a fifth of what the
-// platform allows. A 100-page document is ~210 chunks, which at the free
-// tier's 100 embeddings/minute is about 126 seconds.
+// The ceiling depends on a project setting, and the two possibilities differ
+// by 5x: 300s with fluid compute (the default for projects created after
+// April 2025), 60s for a legacy project without it. Vercel's own docs carry
+// both tables, which is exactly how you end up confidently sizing an upload
+// limit against the wrong one.
+//
+// So this is declared at the higher value -- a project that only allows 60s
+// caps it anyway -- and the REAL gate is UPLOAD_TIME_BUDGET_S below, which is
+// checked at runtime against the work actually required.
 export const maxDuration = 300;
+
+// What the deployment can genuinely spend on one upload.
+//
+// Defaults to the pessimistic 60, so a project without fluid compute is
+// correct out of the box. Raise it to 300 once you have confirmed fluid
+// compute is enabled (Project Settings -> Functions).
+const TIME_BUDGET_S = Number(process.env.UPLOAD_TIME_BUDGET_S || 60);
+
+// Embedding requests per minute the provider allows. Gemini's free tier is
+// 100; a paid tier is far higher, so raising this is the other half of
+// supporting long documents.
+const EMBED_RPM = Number(process.env.GEMINI_EMBED_RPM || 95);
+
+// Extraction, chunking, inserts and network need their share of the budget.
+// Two thirds for embedding is conservative and has held in testing.
+const EMBED_SHARE = 0.66;
 
 const MAX_BYTES = 10 * 1024 * 1024;
 // Chunks are inserted in batches for the same reason as the ingestion script:
@@ -87,6 +109,30 @@ export async function POST(request) {
     return fail(
       "No text could be extracted. Scanned PDFs need OCR before they can be searched.",
       400
+    );
+  }
+
+  // Refuse BEFORE spending any quota.
+  //
+  // Extraction and chunking are local and free, so at this point the exact
+  // cost of the document is known rather than estimated from its page count --
+  // and pages are a poor proxy, ranging from 1.5 to 4.25 chunks each across
+  // the corpus. Checking here turns a request that would have died at the
+  // platform's timeout, halfway through, leaving a half-indexed document
+  // behind, into an immediate sentence explaining what will fit.
+  const embedSeconds = (chunks.length / EMBED_RPM) * 60;
+  const allowedSeconds = TIME_BUDGET_S * EMBED_SHARE;
+
+  if (embedSeconds > allowedSeconds) {
+    const fits = Math.floor((allowedSeconds / 60) * EMBED_RPM);
+    const roughPages = Math.max(1, Math.floor(pageCount * (fits / chunks.length)));
+
+    return fail(
+      `That document needs ${chunks.length} passages indexed, which takes about ` +
+        `${Math.round(embedSeconds)}s — longer than this deployment can spend on one ` +
+        `upload (${Math.round(allowedSeconds)}s). Try a document of roughly ` +
+        `${roughPages} pages or fewer, or split this one.`,
+      413
     );
   }
 

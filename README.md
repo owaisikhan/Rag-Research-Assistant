@@ -160,13 +160,30 @@ with a *different* session, while remaining visible to its own.
 | Limit | Value | Why |
 |---|---|---|
 | File size | 10 MB | |
-| Pages | 100 | ~210 chunks, ~126s to embed at the free tier's 100/minute -- inside Vercel's 300s ceiling |
+| Pages | 100 (ceiling) | The real gate is time, not pages -- see below |
 | Documents per visitor | 3 | |
 | Lifetime | 24 hours | Purged opportunistically; no scheduled job needed |
 | Interrupted uploads | 10 minutes | Retryable rather than occupying an allowance slot all day |
 
 **On timeouts.** Vercel terminates a function that exceeds its duration; it does
-not restart or retry it, and anything already written stays written. So an
+not restart or retry it, and anything already written stays written.
+
+How long that is depends on a project setting, and the two answers differ by
+5x: **300s** with fluid compute (the default for projects created after April
+2025) and **60s** for a legacy project without it. Vercel's docs carry both
+tables, which is a good way to size an upload limit confidently against the
+wrong one.
+
+So the page cap is only a coarse ceiling. The real gate is `UPLOAD_TIME_BUDGET_S`
+(default 60, raise to 300 once you have confirmed fluid compute), checked at
+runtime against the work the document actually requires. Extraction and
+chunking are local and free, so by then the exact chunk count is known --
+and pages are a poor proxy for it, ranging from 1.5 to 4.25 chunks per page
+across this corpus. A 30-page document can cost less than a 21-page one.
+
+A document that will not fit is refused immediately, with a sentence saying
+what would, instead of dying at the platform timeout halfway through and
+leaving a half-indexed document behind. So an
 upload writes its document row with a `pending:` sentinel hash FIRST, and
 commits the real hash only once every chunk is stored and counted. A timeout
 therefore leaves a row that can never be mistaken for a complete document --
