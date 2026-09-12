@@ -260,8 +260,14 @@ Two traps worth knowing, both of which bit during the build:
 
 The shell carries controls the product does not have behind it yet, because a
 pitch reads better when it looks like a product than a page. **Every staged
-control says what it will do when clicked** rather than sitting dead — a button
-that looks live and does nothing reads as broken, not as unfinished.
+control in the top bar and composer says what it will do when clicked** rather
+than sitting dead — a button that looks live and does nothing reads as broken,
+not as unfinished.
+
+The nav rail is the exception, and deliberately so: it is decoration, so its
+marks are rendered as plain `<span>`s rather than buttons. No pointer cursor,
+no focus ring, nothing that invites a click it cannot answer. A dead button is
+worse than no button; a mark that was never clickable is furniture.
 
 | Real today | Staged |
 |---|---|
@@ -274,6 +280,16 @@ that looks live and does nothing reads as broken, not as unfinished.
 | Fullscreen | Improve-this-question |
 | Light / dark theme | Output format (table / JSON) |
 | Remove a document | Share a conversation by link |
+
+The rail, the brand mark and the corner button are fixed to the viewport edge
+rather than being a column in the layout, which is what lets the rail sit flush
+to the left with its corners curving out of the page. Those inverted corners
+are two squares of rail colour with a rounded cut-out of page colour laid over
+each — `border-radius` only curves inward, so there is no direct way to do it.
+
+Desktop is tuned; mobile currently degrades rather than being designed (the
+rail is hidden below `lg` and the columns stack). It does not overflow at
+390px, but it has not had a layout pass.
 
 Share is staged on purpose rather than for time: a shareable link means storing
 a conversation server-side under a public id, which is a privacy decision about

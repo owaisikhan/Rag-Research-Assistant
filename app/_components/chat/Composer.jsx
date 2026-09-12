@@ -64,7 +64,7 @@ export default function Composer({
         event.preventDefault();
         onSubmit();
       }}
-      className="composer-glow rounded-2xl bg-surface-raised p-3 transition-shadow"
+      className="composer-glow rounded-2xl bg-surface-raised p-4 transition-shadow"
     >
       <input
         ref={fileRef}
@@ -97,10 +97,10 @@ export default function Composer({
         }}
         placeholder={placeholder}
         disabled={disabled}
-        className="max-h-44 min-h-10 w-full resize-none bg-transparent px-1.5 py-1.5 text-sm text-ink outline-none placeholder:text-ink-faint disabled:opacity-60"
+        className="max-h-44 min-h-11 w-full resize-none bg-transparent px-1.5 py-1.5 text-[0.95rem] text-ink outline-none placeholder:text-ink-faint disabled:opacity-60"
       />
 
-      <div className="mt-1 flex items-center gap-1">
+      <div className="mt-2 flex items-center gap-1">
         {TOOLS.map((tool, index) => (
           <span key={tool.id} className="flex items-center">
             <button

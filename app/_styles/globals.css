@@ -121,6 +121,46 @@
     color: transparent;
   }
 
+
+  /* The rail's inverted corners.
+     A border-radius curves inward; what the reference has is the page
+     background curving INTO the rail above and below it. So each notch is a
+     square of rail colour with a rounded square of page colour laid on top --
+     the cut-out is the illusion. The two squares take the gradient's end
+     colours rather than the gradient itself, which is indistinguishable at
+     2rem and avoids a second gradient that would have to stay in sync. */
+  .rail-notch {
+    position: absolute;
+    left: 0;
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .rail-notch::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-color: var(--color-surface);
+  }
+
+  .rail-notch-top {
+    top: -2rem;
+    background-color: var(--color-primary);
+  }
+
+  .rail-notch-top::after {
+    border-bottom-left-radius: 2rem;
+  }
+
+  .rail-notch-bottom {
+    bottom: -2rem;
+    background-color: var(--color-accent);
+  }
+
+  .rail-notch-bottom::after {
+    border-top-left-radius: 2rem;
+  }
+
   /* The composer's lift. A ring plus a wide soft shadow in the brand hue --
      the thing that makes the input read as the focal point of the page. */
   .composer-glow {
@@ -186,12 +226,17 @@
 .idle-orb {
   --orb-opacity: 1;
   opacity: var(--orb-opacity);
+  /* A RING, not a blob: a dark core, a bright rim, then a fade. The stops
+     matter -- a bright centre reads as a spotlight behind the text, whereas
+     the rim reads as an object sitting in the space. */
   background-image: radial-gradient(
     circle at 50% 50%,
-    oklch(30% 0.14 300 / 0.9) 0%,
-    oklch(58% 0.26 287 / 0.55) 38%,
-    oklch(65% 0.28 322 / 0.22) 58%,
-    transparent 72%
+    oklch(22% 0.10 300 / 0.95) 0%,
+    oklch(26% 0.13 300 / 0.95) 28%,
+    oklch(68% 0.22 300 / 0.85) 46%,
+    oklch(62% 0.26 315 / 0.45) 58%,
+    oklch(60% 0.24 320 / 0.12) 68%,
+    transparent 76%
   );
   filter: blur(18px);
   animation: orb-breathe 6s ease-in-out infinite;

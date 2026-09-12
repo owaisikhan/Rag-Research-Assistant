@@ -209,28 +209,30 @@ export default function ChatPanel() {
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_18rem]">
       {/* ---------------------------------------------------- conversation */}
       <div className="flex min-w-0 flex-col self-start">
         <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">
+            <h1 className="text-3xl font-bold tracking-tight text-ink sm:text-4xl">
               {siteConfig.name}
             </h1>
-            <p className="mt-1 text-sm text-ink-muted">{siteConfig.tagline}</p>
+            <p className="mt-1.5 text-[0.95rem] text-ink-muted">{siteConfig.tagline}</p>
           </div>
           <OptionsMenu messages={messages} onClear={clearChat} />
         </div>
 
         <div className="flex-1 space-y-5">
           {isEmpty && (
-            <div className="relative flex flex-col items-center justify-center py-10 text-center sm:py-16">
+            <div className="flex flex-col items-center justify-center py-6 text-center sm:py-8">
               {/* The orb. Pure decoration, and the reason the empty state
                   reads as a product waiting rather than a page missing its
-                  content. */}
-              <div className="idle-orb pointer-events-none absolute h-56 w-56 rounded-full" />
+                  content. It gets its own space rather than sitting behind the
+                  text -- a ring under a paragraph is a contrast problem, and
+                  the reference keeps it clear for the same reason. */}
+              <div className="idle-orb pointer-events-none mb-8 h-52 w-52 shrink-0 rounded-full" />
 
-              <div className="relative">
+              <div>
                 <p className="text-base font-medium text-ink">
                   {documents.length === 0
                     ? "Upload a PDF to get started"

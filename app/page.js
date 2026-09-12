@@ -27,10 +27,13 @@ export default async function HomePage() {
 
   return (
     <Toaster>
-      <div className="mx-auto flex w-full max-w-[84rem] gap-6 px-4 py-6 sm:px-6">
-        <Sidebar />
+      {/* The rail and the mark are fixed to the viewport edge, as in the
+          reference, so they are siblings of the content rather than a column
+          inside it. The left padding is what keeps the content clear of them. */}
+      <Sidebar />
 
-        <main className="min-w-0 flex-1">
+      <div className="mx-auto w-full max-w-[86rem] px-4 py-6 sm:px-6 lg:pl-[7.5rem] lg:pr-8">
+        <main className="min-w-0">
           <TopBar />
 
           {!isConfigured ? (
