@@ -118,6 +118,41 @@ const WINDOW_MS = 60_000;
 
 const geminiWindow = createRateWindow({ limit: GEMINI_LIMIT_PER_MINUTE, windowMs: WINDOW_MS });
 
+/**
+ * Gemini's free tier enforces TWO quotas, and they need opposite responses:
+ *
+ *   EmbedContentRequestsPerMinutePerProjectPerModel-FreeTier = 100
+ *   EmbedContentRequestsPerDayPerProjectPerModel-FreeTier    = 1000
+ *
+ * A per-minute rejection is worth waiting out -- it clears in under a minute.
+ * A per-day rejection is not: the retryDelay it returns is a small number of
+ * seconds even when the quota does not reset for hours, so honouring it burns
+ * every retry on a request that cannot succeed, then reports "429" as though
+ * it were a transient blip. The run needs to stop and say so plainly.
+ */
+function quotaKind(payload) {
+  try {
+    const violations = JSON.parse(payload).error?.details?.find((detail) =>
+      String(detail["@type"]).endsWith("QuotaFailure")
+    )?.violations;
+
+    const id = violations?.map((violation) => violation.quotaId).join(" ") ?? "";
+    if (/PerDay/i.test(id)) return "daily";
+    if (/PerMinute/i.test(id)) return "minute";
+    return "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+/** Thrown when the day's allowance is gone; retrying cannot help. */
+export class DailyQuotaExhausted extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "DailyQuotaExhausted";
+  }
+}
+
 /** Google returns how long to wait; honour it instead of guessing. */
 function retryDelayFrom(payload) {
   try {
@@ -176,6 +211,18 @@ async function embedWithGemini(texts, taskType) {
     }
 
     const detail = await response.text();
+
+    if (response.status === 429 && quotaKind(detail) === "daily") {
+      throw new DailyQuotaExhausted(
+        "Gemini free tier: the daily embedding allowance (1000 requests, where " +
+          "each TEXT counts as one) is exhausted. It resets on Google's clock, " +
+          "usually within 24 hours.\n" +
+          "  Options: wait for the reset and re-run (ingestion resumes exactly " +
+          "where it stopped), enable billing on the Google Cloud project, or " +
+          "switch EMBEDDING_MODEL to a provider with headroom."
+      );
+    }
+
     const retryable = response.status === 429 || response.status >= 500;
 
     if (!retryable || attempt === MAX_ATTEMPTS) {

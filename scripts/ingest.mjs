@@ -297,6 +297,14 @@ async function main() {
       const detail = result.chunks > 0 ? ` (${result.chunks} chunks)` : "";
       console.log(`${position} ${result.status.padEnd(9)} ${fileName}${detail}`);
     } catch (error) {
+      // A daily quota is not a per-file problem: every remaining document
+      // would fail identically. Stop and say so, rather than printing the
+      // same error four hundred times.
+      if (error.name === "DailyQuotaExhausted") {
+        console.error(`${position} STOPPED   ${fileName}\n\n${error.message}\n`);
+        break;
+      }
+
       tally.failed += 1;
       // One malformed PDF must not abandon the other 399.
       console.error(`${position} FAILED    ${fileName}\n           ${error.message}`);
