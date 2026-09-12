@@ -14,7 +14,7 @@ import { chunkPages } from "@/app/_lib/rag/chunk";
 import { embedDocuments, EMBEDDING_MODEL } from "@/app/_lib/rag/embed";
 import { createClient } from "@/app/_lib/supabase-server";
 import { ensureSessionId } from "@/app/_lib/session";
-import { checkRateLimit } from "@/app/_lib/rag/limits";
+import { checkRateLimit, refundRateLimit } from "@/app/_lib/rag/limits";
 
 export const runtime = "nodejs";
 
@@ -81,26 +81,38 @@ function fail(message, status) {
 }
 
 export async function POST(request) {
-  // Uploads spend embedding quota, so they share the question limiter.
+  // Uploads spend embedding quota, so they share the question limiter. The
+  // check is up front rather than just before the embedding call, because
+  // extracting and chunking a 60 MB PDF is real work and an unlimited endpoint
+  // that does it on request is its own denial-of-service.
   const { allowed } = await checkRateLimit(request);
   if (!allowed) {
     return fail("You have reached this demo's hourly limit. Try again later.", 429);
   }
+
+  // Everything between here and the first embedding call is local and free, so
+  // a failure in that stretch gives the slot back. Otherwise choosing the wrong
+  // file twice -- a .docx, then something oversized -- costs two of a
+  // visitor's twelve for work that never touched a metered API.
+  const refundAndFail = async (message, status) => {
+    await refundRateLimit(request);
+    return fail(message, status);
+  };
 
   let file;
   try {
     const form = await request.formData();
     file = form.get("file");
   } catch {
-    return fail("That upload could not be read.", 400);
+    return refundAndFail("That upload could not be read.", 400);
   }
 
   if (!file || typeof file.arrayBuffer !== "function") {
-    return fail("Choose a PDF to upload.", 400);
+    return refundAndFail("Choose a PDF to upload.", 400);
   }
 
   if (file.size > MAX_BYTES) {
-    return fail(
+    return refundAndFail(
       `That file is ${(file.size / 1024 / 1024).toFixed(1)} MB; the limit is ${MAX_MB} MB.`,
       400
     );
@@ -110,7 +122,7 @@ export async function POST(request) {
 
   // Trust the bytes, not the extension or the declared MIME type.
   if (Buffer.from(bytes.subarray(0, 5)).toString("latin1") !== "%PDF-") {
-    return fail("That file is not a PDF.", 400);
+    return refundAndFail("That file is not a PDF.", 400);
   }
 
   const sessionId = await ensureSessionId();
@@ -123,12 +135,12 @@ export async function POST(request) {
   try {
     ({ pages, pageCount, contentHash, meta } = await extractPdfBytes(bytes));
   } catch {
-    return fail("That PDF could not be read. It may be corrupt or password protected.", 400);
+    return refundAndFail("That PDF could not be read. It may be corrupt or password protected.", 400);
   }
 
   const chunks = chunkPages(pages);
   if (chunks.length === 0) {
-    return fail(
+    return refundAndFail(
       "No text could be extracted. Scanned PDFs need OCR before they can be searched.",
       400
     );
@@ -149,7 +161,7 @@ export async function POST(request) {
     const fits = Math.floor((allowedSeconds / 60) * EMBED_RPM);
     const roughPages = Math.max(1, Math.floor(pageCount * (fits / chunks.length)));
 
-    return fail(
+    return refundAndFail(
       `That document needs ${chunks.length} passages indexed, which takes about ` +
         `${Math.round(embedSeconds)}s — longer than this deployment can spend on one ` +
         `upload (${Math.round(allowedSeconds)}s). Try a document of roughly ` +
@@ -186,7 +198,7 @@ export async function POST(request) {
 
   if (beginError) {
     // These are the limit messages from the database, written for a person.
-    return fail(beginError.message.replace(/^.*?:\s*/, ""), 400);
+    return refundAndFail(beginError.message.replace(/^.*?:\s*/, ""), 400);
   }
 
   try {
@@ -245,7 +257,12 @@ export async function POST(request) {
     // shortly" when the answer is "tomorrow" sends them back to retry against
     // a wall, and makes the app look broken rather than rationed.
     if (error.name === "DailyQuotaExhausted") {
-      return fail(
+      // Refunded even though embedding had started. When the DAY's allowance
+      // is gone nothing this upload did can be completed, and charging an
+      // hourly slot on top means a visitor who hits the daily wall also loses
+      // the ability to ask questions about what they already uploaded. Two
+      // punishments for one exhausted quota.
+      return refundAndFail(
         "This demo's daily indexing allowance is used up. It resets every 24 hours — " +
           "come back tomorrow, or ask a question about the existing library, which " +
           "still works.",
