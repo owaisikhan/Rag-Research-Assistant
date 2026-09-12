@@ -46,13 +46,52 @@ export function createRateWindow({ limit, windowMs = 60_000, now = Date.now, sle
     /**
      * Record that the provider rejected us for `ms`.
      *
-     * The window is marked FULLY SPENT rather than cleared. Clearing it would
-     * say "no recent requests", which is the opposite of being rate limited.
+     * The block is honoured for EXACTLY ms, and the real request history is
+     * left alone -- neither cleared nor replaced.
+     *
+     * Clearing was the original bug: it says "nothing sent recently", which is
+     * the opposite of being rate limited, and the next call bursts straight
+     * into another 429. Nine documents failed in a row that way.
+     *
+     * Stamping the window as fully spent was the over-correction, and it cost
+     * a great deal more than it looked. Google usually asks for a SHORT wait
+     * -- two seconds -- but a fabricated full window means the next reserve()
+     * also waits out a whole window roll on top. A two-second backoff became a
+     * sixty-seven second stall, inside a request, with nothing on screen
+     * explaining it.
+     *
+     * blockedUntil alone prevents the burst, because nothing may go out until
+     * it passes. Keeping the true history means what happens after that is
+     * paced by what was actually sent.
      */
     block(ms) {
+      blockedUntil = now() + ms;
+    },
+
+    /**
+     * How many more fit RIGHT NOW, without waiting.
+     *
+     * The point of asking rather than reserving: a serverless request that
+     * blocks for a minute inside reserve() is paid for, invisible to the
+     * person waiting, and eats the function's duration budget. A caller that
+     * can ask first can return instead, and let the browser come back.
+     */
+    available() {
       const at = now();
-      blockedUntil = at + ms;
-      recent = Array.from({ length: limit }, () => at);
+      if (at < blockedUntil) return 0;
+      recent = recent.filter((stamp) => at - stamp < windowMs);
+      return Math.max(0, limit - recent.length);
+    },
+
+    /** How long until at least one more fits. 0 when something fits now. */
+    msUntilAvailable() {
+      const at = now();
+      if (at < blockedUntil) return blockedUntil - at;
+
+      recent = recent.filter((stamp) => at - stamp < windowMs);
+      if (recent.length < limit) return 0;
+
+      return Math.max(0, windowMs - (at - recent[0]));
     },
 
     /** For tests and diagnostics. */

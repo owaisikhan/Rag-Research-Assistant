@@ -45,7 +45,7 @@ export async function POST(request) {
   const supabase = await createClient();
 
   try {
-    const { remaining, embedded, total, contentHash } = await runIndexPass({
+    const { remaining, embedded, total, contentHash, waitMs } = await runIndexPass({
       supabase,
       sessionId,
       documentId,
@@ -57,7 +57,10 @@ export async function POST(request) {
     });
 
     if (remaining > 0) {
-      return Response.json({ ok: true, indexing: true, embedded, total, remaining });
+      // waitMs > 0 means the provider's per-minute window is full. Reported
+      // rather than waited out, so the browser can say what it is waiting for
+      // and this function is not billed for sitting idle.
+      return Response.json({ ok: true, indexing: true, embedded, total, remaining, waitMs });
     }
 
     // Everything is embedded, so the document can stop being `pending:` and

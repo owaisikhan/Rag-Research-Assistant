@@ -225,6 +225,12 @@ the same reason — pass length is how often the count moves. At the full budget
 a 460-passage document would report twice in five minutes. It also means a
 failed pass loses a minute of work rather than three.
 
+A pass never waits on the provider's per-minute window either. It embeds what
+the window allows right now and reports `waitMs` if there is nothing left,
+which the browser shows as "waiting Ns for the rate limit" before coming back.
+Blocking inside the request would be billed, would count against the function's
+duration, and would look exactly like a hang.
+
 The document keeps its `pending:` hash throughout.
 
 That sentinel is what makes this safe, and it was built for timeouts rather

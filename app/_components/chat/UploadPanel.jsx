@@ -27,8 +27,19 @@ import { useToast } from "../ui/Toaster";
  */
 function indexingLabel(progress) {
   if (!progress) return "Reading and indexing your PDF…";
+
   const pct = Math.round((progress.done / Math.max(1, progress.total)) * 100);
-  return `Indexing ${progress.done} of ${progress.total} passages (${pct}%)…`;
+  const done = `${progress.done} of ${progress.total} passages (${pct}%)`;
+
+  // Saying WHICH wait it is matters. "Indexing…" that does not move for a
+  // minute reads as a hang; "waiting for the rate limit" reads as a queue,
+  // which is what it is.
+  if (progress.waitingMs > 0) {
+    const seconds = Math.ceil(progress.waitingMs / 1000);
+    return `Indexed ${done} — waiting ${seconds}s for the rate limit…`;
+  }
+
+  return `Indexing ${done}…`;
 }
 
 export default function UploadPanel({
@@ -111,7 +122,7 @@ export default function UploadPanel({
    * enough for the largest document the daily allowance can index at all.
    */
   async function finishIndexing(documentId, total) {
-    const MAX_PASSES = 20;
+    const MAX_PASSES = 40;
 
     for (let pass = 0; pass < MAX_PASSES; pass++) {
       const response = await fetch("/api/upload/continue", {
@@ -127,9 +138,20 @@ export default function UploadPanel({
         return;
       }
 
-      setProgress({ done: result.embedded ?? 0, total: result.total ?? total });
+      setProgress({
+        done: result.embedded ?? 0,
+        total: result.total ?? total,
+        waitingMs: result.waitMs ?? 0,
+      });
 
       if (!result.indexing) return;
+
+      // The provider's per-minute window is full. The server told us how long
+      // rather than holding the request open, so the wait happens here where
+      // it can be shown.
+      if (result.waitMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, Math.min(result.waitMs + 250, 65_000)));
+      }
     }
 
     setError("Indexing is taking longer than expected. Try uploading again to carry on.");

@@ -270,3 +270,23 @@ export async function embedQuery(text) {
 
   return vectors[0];
 }
+
+/**
+ * How much embedding capacity is free right now, and how long until some is.
+ *
+ * Exposed so a request can decide NOT to wait. Blocking inside reserve() is
+ * correct for a long-running script and wrong for a serverless request: the
+ * wait is billed, invisible to whoever is watching a progress bar, and counts
+ * against the function's duration limit.
+ */
+export function embedCapacity() {
+  if (config.provider !== "gemini") {
+    // Other providers are not paced locally, so there is never a wait to report.
+    return { available: Number.MAX_SAFE_INTEGER, msUntilAvailable: 0 };
+  }
+
+  return {
+    available: geminiWindow.available(),
+    msUntilAvailable: geminiWindow.msUntilAvailable(),
+  };
+}
