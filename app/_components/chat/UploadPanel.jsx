@@ -26,6 +26,7 @@ export default function UploadPanel({
   isBusy,
   incomingFile,
   onIncomingHandled,
+  usedDocumentIds,
 }) {
   const notify = useToast();
   const [isUploading, setIsUploading] = useState(false);
@@ -146,63 +147,85 @@ export default function UploadPanel({
       )}
 
       {hasDocuments && (
-        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
-          {documents.map((document) => (
-            <li
-              key={document.id}
-              className="flex flex-wrap items-center gap-x-3 gap-y-2 bg-surface-raised px-3.5 py-3"
-            >
-              <Icon name="file" className="h-4 w-4 shrink-0 text-ink-faint" />
+        <>
+          <h2 className="mb-2 text-[0.7rem] font-semibold uppercase tracking-wide text-ink-faint">
+            Uploaded documents
+          </h2>
 
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm text-ink" title={document.title}>
-                  {document.title}
-                </p>
-                <p className="mt-0.5 text-xs text-ink-faint">
-                  {document.pageCount} pages · {document.chunkCount} passages ·
-                  deleted after 24h
-                </p>
-              </div>
+          <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+            {documents.map((document) => {
+              const wasUsed = usedDocumentIds?.has(document.id);
 
-              <div className="flex shrink-0 items-center gap-1">
-                {/* Summarising is the one thing here that is not a question,
-                    so it gets its own control rather than a suggested prompt
-                    the visitor has to think to type. */}
-                <button
-                  type="button"
-                  onClick={() => onSummarise?.(document)}
-                  disabled={isBusy}
-                  className="rounded-lg px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary-soft disabled:cursor-not-allowed disabled:opacity-40"
+              return (
+                <li
+                  key={document.id}
+                  className={`bg-surface-raised px-3.5 py-3 ${
+                    wasUsed ? "border-l-2 border-l-primary" : ""
+                  }`}
                 >
-                  Summarise
-                </button>
-                <button
-                  type="button"
-                  onClick={() => remove(document.id, document.title)}
-                  className="rounded-lg px-2 py-1 text-xs text-ink-faint transition-colors hover:bg-danger-soft hover:text-danger"
-                >
-                  Remove
-                </button>
-              </div>
-            </li>
-          ))}
+                  <div className="flex items-start gap-2">
+                    <Icon name="file" className="mt-0.5 h-4 w-4 shrink-0 text-ink-faint" />
 
-          {isUploading ? (
-            <li className="bg-surface-raised px-3.5 py-3">
-              <Spinner label="Reading and indexing your PDF…" />
-            </li>
-          ) : (
-            <li className="bg-surface-raised px-3.5 py-2">
-              <label
-                htmlFor="pdf-upload"
-                className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-ink-muted transition-colors hover:bg-primary-soft hover:text-primary"
-              >
-                <Icon name="plus" className="h-3.5 w-3.5" />
-                Add another
-              </label>
-            </li>
-          )}
-        </ul>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-ink" title={document.title}>
+                        {document.title}
+                      </p>
+                      <p className="mt-0.5 text-xs text-ink-faint">
+                        {document.pageCount} pages · {document.chunkCount} passages
+                      </p>
+
+                      {/* A word, not just the accent stripe: which document an
+                          answer came from must not be something a reader has to
+                          infer from a hue. */}
+                      {wasUsed && (
+                        <p className="mt-1.5 inline-block rounded bg-primary-soft px-1.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-primary">
+                          Used in this answer
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-2 flex items-center gap-1">
+                    {/* Summarising is the one thing here that is not a
+                        question, so it gets its own control rather than a
+                        suggested prompt the visitor has to think to type. */}
+                    <button
+                      type="button"
+                      onClick={() => onSummarise?.(document)}
+                      disabled={isBusy}
+                      className="rounded-lg px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary-soft disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Summarise
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => remove(document.id, document.title)}
+                      className="ml-auto rounded-lg px-2 py-1 text-xs text-ink-faint transition-colors hover:bg-danger-soft hover:text-danger"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+
+            {isUploading ? (
+              <li className="bg-surface-raised px-3.5 py-3">
+                <Spinner label="Reading and indexing your PDF…" />
+              </li>
+            ) : (
+              <li className="bg-surface-raised px-3.5 py-2">
+                <label
+                  htmlFor="pdf-upload"
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-ink-muted transition-colors hover:bg-primary-soft hover:text-primary"
+                >
+                  <Icon name="plus" className="h-3.5 w-3.5" />
+                  Add another
+                </label>
+              </li>
+            )}
+          </ul>
+        </>
       )}
     </section>
   );

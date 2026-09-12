@@ -29,7 +29,7 @@ export default async function HomePage() {
           short page, so an empty state does not leave the rule and the footer
           floating halfway up with nothing under them. */}
       <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 py-10 sm:px-6">
-        <main className="min-w-0 flex-1">
+        <main className="flex min-w-0 flex-1 flex-col">
           {!isConfigured ? (
             <Callout tone="danger">
               Supabase is not configured. Copy <code>.env.example</code> to{" "}

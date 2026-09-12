@@ -15,7 +15,6 @@ import { getOutline } from "@/app/_lib/rag/summarize";
 import { streamSummary } from "@/app/_lib/rag/answer";
 import { checkRateLimit } from "@/app/_lib/rag/limits";
 import { readSessionId } from "@/app/_lib/session";
-import { siteConfig } from "@/app/_lib/siteConfig";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -89,13 +88,13 @@ export async function POST(request) {
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        if (siteConfig.mode.showCitations) {
-          controller.enqueue(
+        controller.enqueue(
             line({
               type: "sources",
               sources: outline.passages.map((passage, index) => ({
                 number: index + 1,
                 chunkId: `${documentId}:${passage.chunkId}`,
+                documentId,
                 title: passage.title,
                 authors: passage.authors,
                 section: passage.section,
@@ -108,7 +107,6 @@ export async function POST(request) {
               })),
             })
           );
-        }
 
         for await (const text of streamSummary({ outline })) {
           controller.enqueue(line({ type: "delta", text }));

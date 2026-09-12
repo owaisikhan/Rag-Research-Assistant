@@ -3,7 +3,7 @@
 import { useRef, useState, useEffect } from "react";
 
 import AnswerText from "./AnswerText";
-import SourceCard from "./SourceCard";
+import AnswerSources from "./AnswerSources";
 import UploadPanel from "./UploadPanel";
 import Composer from "./Composer";
 import OptionsMenu from "./OptionsMenu";
@@ -205,41 +205,69 @@ export default function ChatPanel() {
   }
 
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
-  const visibleSources = lastAssistant?.sources ?? [];
   const hasDocuments = documents.length > 0;
   const isEmpty = messages.length === 0;
 
+  // Which documents the newest answer actually drew on. Passed to the document
+  // list so the reader can see, at a glance, which of several uploads the
+  // answer came out of -- the question "but which one said that?" is the first
+  // one anybody asks once there is more than one document in play.
+  const usedDocumentIds = new Set(
+    (lastAssistant?.sources ?? []).map((source) => source.documentId).filter(Boolean)
+  );
+
+  const header = (
+    <header className="mb-8 flex items-start justify-between gap-4">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">
+          {siteConfig.name}
+        </h1>
+        <p className="mt-1 text-sm text-ink-muted">{siteConfig.tagline}</p>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-2">
+        <ThemeToggle />
+        <OptionsMenu messages={messages} onClear={clearChat} />
+      </div>
+    </header>
+  );
+
+  const uploads = (
+    <UploadPanel
+      documents={documents}
+      onChange={refreshDocuments}
+      onSummarise={summarise}
+      isBusy={isStreaming}
+      incomingFile={pendingFile}
+      onIncomingHandled={() => setPendingFile(null)}
+      usedDocumentIds={usedDocumentIds}
+    />
+  );
+
+  // Nothing uploaded: the drop zone is the whole page, centred in what is left
+  // of the viewport under the header rather than sitting just below it.
+  if (!hasDocuments) {
+    return (
+      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col">
+        {header}
+        <div className="flex flex-1 items-center justify-center py-8">
+          <div className="w-full">{uploads}</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    // One centred column. The sidebar and the right-hand document rail are
-    // both gone: this is a page for reading one conversation, and every column
-    // added to that is a column competing with it.
-    <div className="mx-auto w-full max-w-3xl">
-      <header className="mb-8 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">
-            {siteConfig.name}
-          </h1>
-          <p className="mt-1 text-sm text-ink-muted">{siteConfig.tagline}</p>
-        </div>
+    <div className="mx-auto w-full max-w-6xl">
+      {header}
 
-        <div className="flex shrink-0 items-center gap-2">
-          <ThemeToggle />
-          <OptionsMenu messages={messages} onClear={clearChat} />
-        </div>
-      </header>
+      <div className="grid gap-8 lg:grid-cols-[17rem_minmax(0,1fr)]">
+        {/* Documents on the left, so the thing being asked about sits beside
+            the asking rather than under it. */}
+        <aside className="lg:sticky lg:top-6 lg:self-start">{uploads}</aside>
 
-      <UploadPanel
-        documents={documents}
-        onChange={refreshDocuments}
-        onSummarise={summarise}
-        isBusy={isStreaming}
-        incomingFile={pendingFile}
-        onIncomingHandled={() => setPendingFile(null)}
-      />
-
-      {hasDocuments && (
-        <>
-          <div className="mt-8 space-y-5">
+        <div className="flex min-w-0 flex-col">
+          <div className="flex-1 space-y-5">
             {isEmpty && (
               <p className="text-sm text-ink-muted">
                 Ask anything about your{" "}
@@ -272,41 +300,25 @@ export default function ChatPanel() {
                       )}
 
                       {message.content !== "" && (
-                        <div className="mt-2 flex gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-                          <button
-                            type="button"
-                            onClick={() => copyAnswer(message.content)}
-                            className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-ink-faint transition-colors hover:bg-primary-soft hover:text-primary"
-                          >
-                            <Icon name="copy" className="h-3.5 w-3.5" />
-                            Copy
-                          </button>
-                        </div>
+                        <>
+                          <AnswerSources sources={message.sources} />
+
+                          <div className="mt-2 flex gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                            <button
+                              type="button"
+                              onClick={() => copyAnswer(message.content)}
+                              className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-ink-faint transition-colors hover:bg-primary-soft hover:text-primary"
+                            >
+                              <Icon name="copy" className="h-3.5 w-3.5" />
+                              Copy
+                            </button>
+                          </div>
+                        </>
                       )}
                     </>
                   )}
                 </div>
               )
-            )}
-
-            {siteConfig.mode.showCitations && visibleSources.length > 0 && (
-              <section>
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
-                  Sources ({visibleSources.length} passages)
-                </h2>
-                <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {visibleSources.map((source) => (
-                    <SourceCard
-                      key={source.chunkId}
-                      source={source}
-                      isActive={activeCitation === source.number}
-                      onSelect={(number) =>
-                        setActiveCitation((current) => (current === number ? null : number))
-                      }
-                    />
-                  ))}
-                </ul>
-              </section>
             )}
 
             {error && <Callout tone="danger">{error}</Callout>}
@@ -340,8 +352,8 @@ export default function ChatPanel() {
               </div>
             )}
           </div>
-        </>
-      )}
+        </div>
+      </div>
     </div>
   );
 }

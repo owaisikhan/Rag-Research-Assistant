@@ -49,6 +49,7 @@ const PATHS = {
   book: "M4 5a2 2 0 012-2h12v18H6a2 2 0 01-2-2zM8 7h7M8 11h7",
   close: "M6 6l12 12M18 6L6 18",
   check: "M4 12l5 5L20 6",
+  chevronDown: "M6 9l6 6 6-6",
   info: "M12 21a9 9 0 100-18 9 9 0 000 18zM12 11v5M12 8h.01",
   gem: "M6 3h12l3 6-9 12L3 9z",
 };

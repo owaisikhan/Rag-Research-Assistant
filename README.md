@@ -237,7 +237,13 @@ Two consequences worth knowing:
 
 ## The interface
 
-One centred column, warm neutrals, a single brass accent, no gradients.
+Warm neutrals, a single brass accent, no gradients.
+
+With nothing uploaded the drop zone is the whole page, centred in the viewport:
+there is exactly one thing to do, so it is the only thing on screen. Once a
+document exists the layout becomes two columns — documents on the left, the
+conversation on the right — so the thing being asked about sits beside the
+asking rather than scrolled away above it.
 
 The palette is ink on paper: a warm near-black ground rather than a blue-black,
 warm off-white type rather than pure white, and one accent that reads like a
@@ -284,6 +290,27 @@ What is left is what works:
 | Fullscreen | Real fullscreen |
 | Theme | Light / dark |
 | Remove | Deletes that document |
+
+### Showing where an answer came from
+
+Under every answer is a **Based on** list: the documents it drew on, with the
+pages, collapsed by default and expandable to the passages themselves.
+
+It is grouped BY DOCUMENT, not listed per passage. Twelve passages out of one
+lease is not twelve sources — it is one document and a set of pages — and the
+page ranges are merged into one readable run (`pp. 3–5, 9` rather than
+`pp. 3–4, p. 5, p. 9`). Adjacent ranges merge as well as overlapping ones, so
+pages 3–4 and 5 read as one reference to one stretch of text.
+
+Documents used by the newest answer are also marked in the left-hand list, with
+an accent stripe **and the words "used in this answer"** — which of several
+uploads an answer came from is not something a reader should have to infer from
+a hue.
+
+`NEXT_PUBLIC_SHOW_CITATIONS` now controls only the inline `[1]` markers inside
+the prose. The Based-on list and the document marking are always on: the markers
+are a presentation choice, but which document a claim came from and on what page
+is the product promise.
 
 Share-by-link is the one thing deliberately not built: it means storing a
 conversation server-side under a public id, which is a privacy decision about
